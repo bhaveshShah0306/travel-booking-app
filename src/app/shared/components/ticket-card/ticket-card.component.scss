@@ -1,0 +1,42 @@
+:host {
+  display: block;
+  margin: 16px;
+}
+
+.ticket-card {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  }
+}
+
+// These styles WILL cascade to the None-encapsulated child component
+// and override Angular Material's default button styles
+::ng-deep {
+  // Override Material button styles within this shadow boundary
+  .mat-raised-button {
+    border-radius: 20px !important;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+
+  .mat-button-base {
+    min-width: 120px !important;
+  }
+
+  // Custom themed buttons
+  .mat-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: white !important;
+  }
+
+  .mat-accent {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
+    color: white !important;
+  }
+}

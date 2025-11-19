@@ -1,0 +1,11 @@
+<div class="offline-indicator" [class.offline]="!isOnline">
+  <div class="indicator-content">
+    <span class="status-dot" [class.offline]="!isOnline"></span>
+    <span class="status-text">
+      {{ isOnline ? "Online" : "Offline Mode" }}
+    </span>
+    <span class="pending-badge" *ngIf="pendingCount > 0">
+      {{ pendingCount }} pending
+    </span>
+  </div>
+</div>

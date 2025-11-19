@@ -1,0 +1,74 @@
+<div class="home-container">
+  <div class="header">
+    <h1>🎫 Travel Booking</h1>
+    <p>Book your journey with ease</p>
+  </div>
+
+  <!-- Stats Card -->
+  <div class="stats-section">
+    <div class="stat-card">
+      <div class="stat-icon">📋</div>
+      <div class="stat-info">
+        <span class="stat-value">{{ storageStats.bookings }}</span>
+        <span class="stat-label">Bookings</span>
+      </div>
+    </div>
+    <div class="stat-card" (click)="viewMyBookings()" style="cursor: pointer">
+      <div class="stat-icon">⏳</div>
+      <div class="stat-info">
+        <span class="stat-value">{{ storageStats.pendingSync }}</span>
+        <span class="stat-label">Pending</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Available Tickets -->
+  <div class="tickets-section">
+    <h2>🚆 Available Tickets</h2>
+    <div class="tickets-grid">
+      <div
+        class="ticket-card"
+        *ngFor="let ticket of tickets"
+        (click)="bookTicket(ticket)"
+      >
+        <div class="ticket-header">
+          <span class="ticket-type" [class]="ticket.type">
+            {{
+              ticket.type === "train"
+                ? "🚆"
+                : ticket.type === "bus"
+                ? "🚌"
+                : "✈️"
+            }}
+            {{ ticket.type | uppercase }}
+          </span>
+          <span class="ticket-price">₹{{ ticket.price }}</span>
+        </div>
+        <div class="ticket-route">
+          <div class="location">
+            <span class="location-label">From</span>
+            <span class="location-name">{{ ticket.from }}</span>
+          </div>
+          <div class="arrow">→</div>
+          <div class="location">
+            <span class="location-label">To</span>
+            <span class="location-name">{{ ticket.to }}</span>
+          </div>
+        </div>
+        <div class="ticket-footer">
+          <span class="ticket-date">{{
+            ticket.date | date : "mediumDate"
+          }}</span>
+          <span class="ticket-seats">{{ ticket.availableSeats }} seats</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="actions-section">
+    <button class="action-btn primary" (click)="viewMyBookings()">
+      📋 My Bookings
+    </button>
+  </div>
+</div>

@@ -1,0 +1,27 @@
+<div class="ticket-actions">
+  <div class="ticket-info">
+    <span class="ticket-type-badge" [ngClass]="'badge-' + ticketType">
+      {{ ticketType | uppercase }}
+    </span>
+    <span class="price">₹{{ price }}</span>
+    <span class="seats">{{ availableSeats }} seats left</span>
+  </div>
+
+  <!-- Angular Material Buttons - styles will be overridden by parent -->
+  <div class="action-buttons">
+    <button
+      mat-raised-button
+      color="primary"
+      (click)="book.emit()"
+      [disabled]="availableSeats === 0"
+    >
+      <mat-icon>flight_takeoff</mat-icon>
+      Book Now
+    </button>
+
+    <button mat-stroked-button color="accent" class="view-details-btn">
+      <mat-icon>info</mat-icon>
+      Details
+    </button>
+  </div>
+</div>

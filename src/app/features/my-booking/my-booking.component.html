@@ -1,0 +1,240 @@
+<!-- src/app/features/my-booking/my-booking.component.html -->
+<div class="my-bookings-page">
+  <!-- Header -->
+  <div class="bookings-header">
+    <div class="header-content">
+      <button class="back-btn" (click)="goHome()">← Home</button>
+      <h1>📋 My Bookings</h1>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <div class="stat-info">
+          <span class="stat-value">{{ stats.total }}</span>
+          <span class="stat-label">Total</span>
+        </div>
+      </div>
+
+      <div class="stat-card pending">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-info">
+          <span class="stat-value">{{ stats.pending }}</span>
+          <span class="stat-label">Pending</span>
+        </div>
+      </div>
+
+      <div class="stat-card confirmed">
+        <div class="stat-icon">✅</div>
+        <div class="stat-info">
+          <span class="stat-value">{{ stats.confirmed }}</span>
+          <span class="stat-label">Confirmed</span>
+        </div>
+      </div>
+
+      <div class="stat-card sync" *ngIf="stats.needsSync > 0">
+        <div class="stat-icon">🔄</div>
+        <div class="stat-info">
+          <span class="stat-value">{{ stats.needsSync }}</span>
+          <span class="stat-label">Needs Sync</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-section">
+    <div class="filter-group">
+      <span class="filter-label">Status:</span>
+      <div class="filter-buttons">
+        <button
+          class="filter-btn"
+          [class.active]="selectedStatus === 'all'"
+          (click)="filterByStatus('all')"
+        >
+          All
+        </button>
+        <button
+          class="filter-btn pending"
+          [class.active]="selectedStatus === 'pending'"
+          (click)="filterByStatus('pending')"
+        >
+          ⏳ Pending
+        </button>
+        <button
+          class="filter-btn confirmed"
+          [class.active]="selectedStatus === 'confirmed'"
+          (click)="filterByStatus('confirmed')"
+        >
+          ✅ Confirmed
+        </button>
+        <button
+          class="filter-btn cancelled"
+          [class.active]="selectedStatus === 'cancelled'"
+          (click)="filterByStatus('cancelled')"
+        >
+          ❌ Cancelled
+        </button>
+      </div>
+    </div>
+
+    <div class="sync-actions">
+      <button
+        class="sync-btn"
+        (click)="syncPendingBookings()"
+        [disabled]="!isOnline || stats.needsSync === 0"
+      >
+        🔄 Sync All
+      </button>
+    </div>
+  </div>
+
+  <!-- Online Status -->
+  <div class="online-status-bar">
+    <span [class.offline]="!isOnline">
+      {{ isOnline ? "🟢 Online" : "🔴 Offline Mode" }}
+    </span>
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-container" *ngIf="isLoading">
+    <div class="spinner"></div>
+    <p>Loading bookings...</p>
+  </div>
+
+  <!-- Empty State -->
+  <div class="empty-state" *ngIf="!isLoading && bookings.length === 0">
+    <div class="empty-icon">📭</div>
+    <h3>No Bookings Yet</h3>
+    <p>Start your journey by booking a ticket!</p>
+    <button class="primary-btn" (click)="searchTickets()">
+      🔍 Search Tickets
+    </button>
+  </div>
+
+  <!-- Filtered Empty State -->
+  <div
+    class="empty-state"
+    *ngIf="!isLoading && bookings.length > 0 && filteredBookings.length === 0"
+  >
+    <div class="empty-icon">🔍</div>
+    <h3>No Bookings Found</h3>
+    <p>Try adjusting your filters</p>
+    <button class="secondary-btn" (click)="filterByStatus('all')">
+      Clear Filters
+    </button>
+  </div>
+
+  <!-- Bookings List -->
+  <div class="bookings-grid" *ngIf="!isLoading && filteredBookings.length > 0">
+    <div class="booking-card" *ngFor="let booking of filteredBookings">
+      <!-- Card Header -->
+      <div class="card-header">
+        <div class="booking-id">
+          <span class="id-label">Booking #</span>
+          <span class="id-value">{{ booking.id || "N/A" }}</span>
+        </div>
+        <div class="badges">
+          <span class="status-badge" [ngClass]="getStatusClass(booking.status)">
+            {{ booking.status | uppercase }}
+          </span>
+          <span
+            class="sync-badge"
+            [ngClass]="getSyncStatusClass(booking.syncStatus)"
+          >
+            {{ booking.syncStatus === "synced" ? "☁️" : "⏳" }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Trip Details -->
+      <div class="trip-details" *ngIf="booking.ticketDetails">
+        <div class="trip-icon">
+          {{ getTicketIcon(booking.ticketDetails.type) }}
+        </div>
+        <div class="trip-info">
+          <div class="route">
+            <span class="city">{{ booking.ticketDetails.from }}</span>
+            <span class="arrow">→</span>
+            <span class="city">{{ booking.ticketDetails.to }}</span>
+          </div>
+          <div class="trip-meta">
+            <span class="date">{{
+              booking.ticketDetails.date | date : "mediumDate"
+            }}</span>
+            <span class="separator">•</span>
+            <span class="type">{{
+              booking.ticketDetails.type | uppercase
+            }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Passenger Info -->
+      <div class="passenger-section">
+        <div class="section-title">
+          👥 Passengers ({{ booking.passengers.length }})
+        </div>
+        <div class="passengers-list">
+          <div
+            class="passenger-item"
+            *ngFor="let passenger of booking.passengers"
+          >
+            <span class="passenger-name">{{ passenger.name }}</span>
+            <span class="passenger-meta"
+              >{{ passenger.age }}yrs, {{ passenger.gender }}</span
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- Amount -->
+      <div class="amount-section">
+        <span class="amount-label">Total Amount:</span>
+        <span class="amount-value">₹{{ booking.totalAmount }}</span>
+      </div>
+
+      <!-- Booking Meta -->
+      <div class="booking-meta">
+        <span class="booked-date"
+          >Booked: {{ booking.createdAt | date : "short" }}</span
+        >
+      </div>
+
+      <!-- Actions -->
+      <div class="card-actions">
+        <button class="action-btn view" (click)="viewBookingDetails(booking)">
+          👁️ View
+        </button>
+
+        <button
+          class="action-btn cancel"
+          *ngIf="booking.status === 'pending'"
+          (click)="cancelBooking(booking)"
+        >
+          ❌ Cancel
+        </button>
+
+        <button
+          class="action-btn delete"
+          *ngIf="booking.status === 'cancelled'"
+          (click)="deleteBooking(booking)"
+        >
+          🗑️ Delete
+        </button>
+
+        <span class="sync-status" *ngIf="booking.syncStatus === 'pending'">
+          ⏳ Pending sync
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer Actions -->
+  <div class="footer-actions" *ngIf="!isLoading && bookings.length > 0">
+    <button class="primary-btn" (click)="searchTickets()">
+      ➕ Book New Ticket
+    </button>
+  </div>
+</div>

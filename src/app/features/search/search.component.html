@@ -1,0 +1,223 @@
+<!-- src/app/features/search/search.component.html -->
+<div class="search-page">
+  <!-- Fixed Header with Search Bar -->
+  <div class="search-header">
+    <div class="header-content">
+      <button class="back-btn" (click)="router.navigate(['/'])">← Back</button>
+      <h1>🔍 Search Tickets</h1>
+    </div>
+
+    <!-- Search Form -->
+    <form [formGroup]="searchForm" (ngSubmit)="onSearch()" class="search-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label>From</label>
+          <select formControlName="from" class="form-control">
+            <option value="">Select City</option>
+            <option *ngFor="let city of cities" [value]="city">
+              {{ city }}
+            </option>
+          </select>
+          <span class="error" *ngIf="f['from'].invalid && f['from'].touched">
+            Please select departure city
+          </span>
+        </div>
+
+        <div
+          class="swap-icon"
+          (click)="
+            searchForm.patchValue({ from: f['to'].value, to: f['from'].value })
+          "
+        >
+          ⇄
+        </div>
+
+        <div class="form-group">
+          <label>To</label>
+          <select formControlName="to" class="form-control">
+            <option value="">Select City</option>
+            <option *ngFor="let city of cities" [value]="city">
+              {{ city }}
+            </option>
+          </select>
+          <span class="error" *ngIf="f['to'].invalid && f['to'].touched">
+            Please select destination city
+          </span>
+        </div>
+
+        <div class="form-group">
+          <label>Date</label>
+          <input
+            type="date"
+            formControlName="date"
+            class="form-control"
+            [min]="minDate"
+          />
+          <span class="error" *ngIf="f['date'].invalid && f['date'].touched">
+            Please select travel date
+          </span>
+        </div>
+
+        <button type="submit" class="search-btn" [disabled]="isLoading">
+          {{ isLoading ? "⏳" : "🔍" }} Search
+        </button>
+      </div>
+    </form>
+
+    <!-- Popular Routes -->
+    <div class="popular-routes">
+      <span class="label">Popular Routes:</span>
+      <div class="route-chips">
+        <button
+          *ngFor="let route of popularRoutes"
+          class="route-chip"
+          (click)="quickSearch(route)"
+        >
+          {{ route.from }} → {{ route.to }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters and Sort Section -->
+  <div class="filters-section">
+    <div class="filter-group">
+      <span class="filter-label">Type:</span>
+      <div class="filter-buttons">
+        <button
+          class="filter-btn"
+          [class.active]="selectedType === 'all'"
+          (click)="filterByType('all')"
+        >
+          All
+        </button>
+        <button
+          class="filter-btn flight"
+          [class.active]="selectedType === 'flight'"
+          (click)="filterByType('flight')"
+        >
+          ✈️ Flight
+        </button>
+        <button
+          class="filter-btn train"
+          [class.active]="selectedType === 'train'"
+          (click)="filterByType('train')"
+        >
+          🚆 Train
+        </button>
+        <button
+          class="filter-btn bus"
+          [class.active]="selectedType === 'bus'"
+          (click)="filterByType('bus')"
+        >
+          🚌 Bus
+        </button>
+      </div>
+    </div>
+
+    <div class="sort-group">
+      <span class="filter-label">Sort by:</span>
+      <div class="filter-buttons">
+        <button
+          class="filter-btn"
+          [class.active]="sortBy === 'price'"
+          (click)="sortTickets('price')"
+        >
+          💰 Price
+        </button>
+        <button
+          class="filter-btn"
+          [class.active]="sortBy === 'date'"
+          (click)="sortTickets('date')"
+        >
+          📅 Date
+        </button>
+        <button
+          class="filter-btn"
+          [class.active]="sortBy === 'seats'"
+          (click)="sortTickets('seats')"
+        >
+          💺 Seats
+        </button>
+      </div>
+    </div>
+
+    <button class="clear-btn" (click)="clearSearch()">🔄 Clear All</button>
+  </div>
+
+  <!-- Results Counter -->
+  <div class="results-header">
+    <h2>
+      {{ filteredTickets.length }}
+      {{ filteredTickets.length === 1 ? "Ticket" : "Tickets" }} Found
+    </h2>
+    <span class="online-status" [class.offline]="!isOnline">
+      {{ isOnline ? "🟢 Online" : "🔴 Offline" }}
+    </span>
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-container" *ngIf="isLoading">
+    <div class="spinner"></div>
+    <p>Searching for tickets...</p>
+  </div>
+
+  <!-- Empty State -->
+  <div class="empty-state" *ngIf="!isLoading && filteredTickets.length === 0">
+    <div class="empty-icon">🔍</div>
+    <h3>No Tickets Found</h3>
+    <p>Try adjusting your search criteria or browse popular routes</p>
+    <button class="primary-btn" (click)="clearSearch()">
+      Show All Tickets
+    </button>
+  </div>
+
+  <!-- Tickets Grid - Using Custom Material Components -->
+  <div class="tickets-grid" *ngIf="!isLoading && filteredTickets.length > 0">
+    <app-ticket-card
+      *ngFor="let ticket of filteredTickets"
+      [ticket]="ticket"
+      (click)="bookTicket(ticket)"
+    >
+    </app-ticket-card>
+  </div>
+
+  <!-- Alternative: Simple Ticket Cards (without Material) -->
+  <!-- <div class="tickets-grid-simple" *ngIf="!isLoading && filteredTickets.length > 0">
+    <div
+      class="ticket-card-simple"
+      *ngFor="let ticket of filteredTickets"
+      (click)="bookTicket(ticket)"
+    >
+      <div class="ticket-header">
+        <span class="ticket-type" [class]="ticket.type">
+          {{ getTicketIcon(ticket.type) }} {{ ticket.type | uppercase }}
+        </span>
+        <span class="ticket-price">₹{{ ticket.price }}</span>
+      </div>
+
+      <div class="ticket-route">
+        <div class="location">
+          <span class="location-label">From</span>
+          <span class="location-name">{{ ticket.from }}</span>
+        </div>
+        <div class="arrow">→</div>
+        <div class="location">
+          <span class="location-label">To</span>
+          <span class="location-name">{{ ticket.to }}</span>
+        </div>
+      </div>
+
+      <div class="ticket-footer">
+        <span class="ticket-date">{{ ticket.date | date:'mediumDate' }}</span>
+        <span class="ticket-seats" [class.low]="ticket.availableSeats < 10">
+          {{ ticket.availableSeats }} seats
+        </span>
+      </div>
+
+      <button class="book-btn" [disabled]="ticket.availableSeats === 0">
+        {{ ticket.availableSeats === 0 ? 'Sold Out' : 'Book Now' }}
+      </button>
+    </div>
+  </div> -->
+</div>

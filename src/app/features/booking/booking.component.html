@@ -1,0 +1,200 @@
+<div class="booking-container">
+  <div class="booking-header">
+    <button
+      type="button"
+      class="back-btn"
+      (click)="router.navigate(['/'])"
+      aria-label="Back to home page"
+    >
+      ← Back
+    </button>
+    <h1>Book Your Ticket</h1>
+  </div>
+
+  <div
+    class="ticket-summary"
+    *ngIf="ticket"
+    role="region"
+    aria-label="Ticket Summary"
+  >
+    <div class="summary-row">
+      <span class="label">Route:</span>
+      <span class="value"> {{ ticket!.from }} → {{ ticket!.to }} </span>
+    </div>
+    <div class="summary-row">
+      <span class="label">Date:</span>
+      <span class="value">
+        {{ ticket!.date | date : "mediumDate" }}
+      </span>
+    </div>
+    <div class="summary-row">
+      <span class="label">Price per seat:</span>
+      <span class="value"> ₹{{ ticket!.price }} </span>
+    </div>
+  </div>
+
+  <form
+    [formGroup]="bookingForm"
+    (ngSubmit)="submitBooking()"
+    class="booking-form"
+    aria-label="Passenger booking form"
+    novalidate
+  >
+    <h2 id="passenger-section">👥 Passenger Details</h2>
+    <p class="helper-text">Maximum 5 passengers per booking</p>
+
+    <div
+      formArrayName="passengers"
+      role="region"
+      aria-labelledby="passenger-section"
+    >
+      <div
+        *ngFor="let passenger of passengers.controls; let i = index"
+        class="passenger-card"
+        [formGroupName]="i"
+        role="region"
+        [attr.aria-label]="'Passenger ' + (i + 1) + ' details'"
+      >
+        <div class="passenger-header">
+          <h3>Passenger {{ i + 1 }} of {{ passengers.length }}</h3>
+          <button
+            type="button"
+            class="remove-btn"
+            *ngIf="passengers.length > 1"
+            (click)="removePassenger(i)"
+            [attr.aria-label]="'Remove passenger ' + (i + 1)"
+            title="Remove this passenger"
+          >
+            🗑️ Remove
+          </button>
+        </div>
+
+        <div class="form-group">
+          <label [for]="'name-' + i" class="required">Full Name *</label>
+          <input
+            [id]="'name-' + i"
+            type="text"
+            formControlName="name"
+            placeholder="Enter your full name"
+            class="form-control"
+            [attr.aria-describedby]="'name-error-' + i"
+            required
+          />
+          <span
+            [id]="'name-error-' + i"
+            class="error"
+            role="alert"
+            *ngIf="
+              passenger.get('name')?.invalid && passenger.get('name')?.touched
+            "
+          >
+            Name is required (minimum 3 characters)
+          </span>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label [for]="'age-' + i" class="required">Age *</label>
+            <input
+              [id]="'age-' + i"
+              type="number"
+              formControlName="age"
+              placeholder="18"
+              class="form-control"
+              min="1"
+              max="120"
+              [attr.aria-describedby]="'age-error-' + i"
+              required
+            />
+            <span
+              [id]="'age-error-' + i"
+              class="error"
+              role="alert"
+              *ngIf="
+                passenger.get('age')?.invalid && passenger.get('age')?.touched
+              "
+            >
+              Valid age required (1-120 years)
+            </span>
+          </div>
+
+          <div class="form-group">
+            <label [for]="'gender-' + i" class="required">Gender *</label>
+            <select
+              [id]="'gender-' + i"
+              formControlName="gender"
+              class="form-control"
+              [attr.aria-describedby]="'gender-error-' + i"
+              required
+            >
+              <option value="" disabled selected>Select gender</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
+            <span
+              [id]="'gender-error-' + i"
+              class="error"
+              role="alert"
+              *ngIf="
+                passenger.get('gender')?.invalid &&
+                passenger.get('gender')?.touched
+              "
+            >
+              Gender selection is required
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      class="add-passenger-btn"
+      (click)="addPassenger()"
+      *ngIf="passengers.length < 5"
+      [attr.aria-label]="
+        'Add passenger, currently ' + passengers.length + ' passenger(s)'
+      "
+    >
+      ➕ Add Passenger
+    </button>
+
+    <div class="total-section" role="region" aria-label="Booking Summary">
+      <div class="total-row">
+        <span>Total Amount:</span>
+        <span class="total-amount" role="status">₹{{ getTotalAmount() }}</span>
+      </div>
+      <div class="passengers-count" aria-live="polite">
+        {{ passengers.length }} passenger(s)
+      </div>
+    </div>
+
+    <div class="offline-notice" role="status" *ngIf="!isOnline">
+      <span>
+        📴 You're offline. Booking will be saved locally and synced when online.
+      </span>
+    </div>
+
+    <button
+      type="submit"
+      class="submit-btn"
+      [disabled]="isSubmitting || bookingForm.invalid"
+      [attr.aria-label]="
+        isSubmitting
+          ? 'Processing your booking'
+          : isOnline
+          ? 'Confirm and submit your booking'
+          : 'Save booking offline'
+      "
+    >
+      {{
+        isSubmitting
+          ? "⏳ Processing..."
+          : isOnline
+          ? "✅ Confirm Booking"
+          : "💾 Save Offline"
+      }}
+    </button>
+  </form>
+</div>

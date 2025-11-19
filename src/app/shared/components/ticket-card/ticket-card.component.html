@@ -1,0 +1,20 @@
+<!-- Material Card with custom child component -->
+<mat-card class="ticket-card">
+  <mat-card-header>
+    <mat-card-title>{{ ticket.from }} → {{ ticket.to }}</mat-card-title>
+    <mat-card-subtitle>{{
+      ticket.date | date : "mediumDate"
+    }}</mat-card-subtitle>
+  </mat-card-header>
+
+  <mat-card-content>
+    <!-- Child component with None encapsulation -->
+    <app-ticket-actions
+      [ticketType]="ticket.type"
+      [price]="ticket.price"
+      [availableSeats]="ticket.availableSeats"
+      (book)="onBookTicket()"
+    >
+    </app-ticket-actions>
+  </mat-card-content>
+</mat-card>
