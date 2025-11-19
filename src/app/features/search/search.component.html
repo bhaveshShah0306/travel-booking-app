@@ -172,18 +172,11 @@
     </button>
   </div>
 
-  <!-- Tickets Grid - Using Custom Material Components -->
-  <div class="tickets-grid" *ngIf="!isLoading && filteredTickets.length > 0">
-    <app-ticket-card
-      *ngFor="let ticket of filteredTickets"
-      [ticket]="ticket"
-      (click)="bookTicket(ticket)"
-    >
-    </app-ticket-card>
-  </div>
-
-  <!-- Alternative: Simple Ticket Cards (without Material) -->
-  <!-- <div class="tickets-grid-simple" *ngIf="!isLoading && filteredTickets.length > 0">
+  <!-- Simple Ticket Cards -->
+  <div
+    class="tickets-grid-simple"
+    *ngIf="!isLoading && filteredTickets.length > 0"
+  >
     <div
       class="ticket-card-simple"
       *ngFor="let ticket of filteredTickets"
@@ -191,7 +184,7 @@
     >
       <div class="ticket-header">
         <span class="ticket-type" [class]="ticket.type">
-          {{ getTicketIcon(ticket.type) }} {{ ticket.type | uppercase }}
+          {{ getTicketIcon(ticket.type) }} {{ ticket.type.toUpperCase() }}
         </span>
         <span class="ticket-price">₹{{ ticket.price }}</span>
       </div>
@@ -209,15 +202,15 @@
       </div>
 
       <div class="ticket-footer">
-        <span class="ticket-date">{{ ticket.date | date:'mediumDate' }}</span>
+        <span class="ticket-date">{{ ticket.date | date : "mediumDate" }}</span>
         <span class="ticket-seats" [class.low]="ticket.availableSeats < 10">
           {{ ticket.availableSeats }} seats
         </span>
       </div>
 
       <button class="book-btn" [disabled]="ticket.availableSeats === 0">
-        {{ ticket.availableSeats === 0 ? 'Sold Out' : 'Book Now' }}
+        {{ ticket.availableSeats === 0 ? "Sold Out" : "Book Now" }}
       </button>
     </div>
-  </div> -->
+  </div>
 </div>

@@ -5,6 +5,7 @@ import { filter } from 'rxjs/operators';
 import { NetworkService } from './network.service';
 import { WorkerManagerService } from './worker-manager.service';
 import { SyncStatus } from '../models/syncstatus.model';
+import { SyncResponseData } from '../models/sync-reponse-data.model';
 
 @Injectable({
   providedIn: 'root',
@@ -61,7 +62,8 @@ export class SyncService {
       .getSyncStream()
       .subscribe((response) => {
         if (response.success && response.data) {
-          const { successful, failed, errors } = response.data;
+          const data = response.data as SyncResponseData;
+          const { successful, failed, errors } = data;
           console.log(
             `✅ Worker sync completed: ${successful} successful, ${failed} failed`
           );
@@ -221,5 +223,3 @@ export class SyncService {
     }
   }
 }
-
-export { SyncStatus };

@@ -1,4 +1,83 @@
-/* You can add global styles to this file, and also import other style files */
+/* src/styles.scss - Global styles */
 
-html, body { height: 100%; }
-body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+/* Reset and Base */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+body {
+  /* Default gradient background for the entire app */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background-attachment: fixed;
+  background-size: cover;
+  min-height: 100vh;
+  color: white;
+  overflow-x: hidden;
+}
+
+/* Ensure router-outlet doesn't interfere with layout */
+router-outlet {
+  display: none;
+}
+
+/* Screen reader only class */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Angular Material overrides for dark theme */
+.mat-mdc-card {
+  background: rgba(255, 255, 255, 0.15) !important;
+  backdrop-filter: blur(10px);
+  color: white !important;
+}
+
+.mat-mdc-button,
+.mat-mdc-raised-button {
+  color: white !important;
+}
+
+/* Fix select dropdowns on dark backgrounds */
+select {
+  color-scheme: dark;
+
+  option {
+    background: #2c3e50;
+    color: white;
+  }
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}

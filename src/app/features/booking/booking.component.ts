@@ -1,8 +1,13 @@
-// BOOKING COMPONENT TYPESCRIPT (booking.component.ts)
-// Fixed for WCAG 2.0 AA Accessibility
-
+// src/app/features/booking/booking.component.ts
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
+import { CommonModule } from '@angular/common';
+import {
+  FormBuilder,
+  FormGroup,
+  FormArray,
+  Validators,
+  ReactiveFormsModule,
+} from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import { NetworkService } from '../../core/services/network.service';
@@ -12,12 +17,14 @@ import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-booking',
+  standalone: true,
+  imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './booking.component.html',
   styleUrls: ['./booking.component.scss'],
 })
 export class BookingComponent implements OnInit, OnDestroy {
   bookingForm!: FormGroup;
-  ticket!: Ticket;
+  ticket: Ticket | null = null;
   isOnline = true;
   isSubmitting = false;
 
@@ -32,13 +39,24 @@ export class BookingComponent implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    // Initialize form FIRST before any async operations
+    this.initForm();
+
     // Load ticket
     const ticketId = this.route.snapshot.paramMap.get('ticketId');
     if (ticketId) {
       const loadedTicket = await this.offlineStorage.getTicketById(ticketId);
       if (loadedTicket) {
         this.ticket = loadedTicket;
+      } else {
+        alert('❌ Ticket not found');
+        this.router.navigate(['/']);
+        return;
       }
+    } else {
+      alert('❌ Invalid ticket ID');
+      this.router.navigate(['/']);
+      return;
     }
 
     // Monitor network with proper subscription cleanup
@@ -48,9 +66,6 @@ export class BookingComponent implements OnInit, OnDestroy {
       }
     );
     this.subscriptions.push(networkSub);
-
-    // Initialize form
-    this.initForm();
 
     // Focus on main heading for accessibility
     setTimeout(() => {
@@ -87,7 +102,6 @@ export class BookingComponent implements OnInit, OnDestroy {
   addPassenger(): void {
     if (this.passengers.length < 5) {
       this.passengers.push(this.createPassengerForm());
-      // Announce to screen readers
       this.announceToScreenReader(
         `Passenger ${this.passengers.length} form added. Please fill in the required details.`
       );
@@ -97,7 +111,6 @@ export class BookingComponent implements OnInit, OnDestroy {
   removePassenger(index: number): void {
     if (this.passengers.length > 1) {
       this.passengers.removeAt(index);
-      // Announce to screen readers
       this.announceToScreenReader(
         `Passenger ${index + 1} removed. ${
           this.passengers.length
@@ -111,6 +124,7 @@ export class BookingComponent implements OnInit, OnDestroy {
       this.announceToScreenReader(
         'Please fill all required fields before submitting'
       );
+      this.markFormGroupTouched(this.bookingForm);
       return;
     }
 
@@ -129,8 +143,8 @@ export class BookingComponent implements OnInit, OnDestroy {
       const bookingId = await this.offlineStorage.saveBooking(booking);
 
       const message = this.isOnline
-        ? `Booking confirmed! Booking ID: ${bookingId}`
-        : `Booking saved offline (ID: ${bookingId}). Will sync when online.`;
+        ? `✅ Booking confirmed! Booking ID: ${bookingId}`
+        : `💾 Booking saved offline (ID: ${bookingId}). Will sync when online.`;
 
       this.announceToScreenReader(message);
       alert(message);
@@ -150,7 +164,6 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   private announceToScreenReader(message: string): void {
-    // Create a live region announcement for screen readers
     const announcement = document.createElement('div');
     announcement.setAttribute('role', 'status');
     announcement.setAttribute('aria-live', 'polite');
@@ -159,9 +172,18 @@ export class BookingComponent implements OnInit, OnDestroy {
     announcement.textContent = message;
     document.body.appendChild(announcement);
 
-    // Remove after announcement
     setTimeout(() => {
       announcement.remove();
     }, 1000);
+  }
+
+  private markFormGroupTouched(formGroup: FormGroup | FormArray): void {
+    Object.values(formGroup.controls).forEach((key) => {
+      if (key instanceof FormGroup || key instanceof FormArray) {
+        this.markFormGroupTouched(key);
+      } else {
+        key.markAsTouched({ onlySelf: true });
+      }
+    });
   }
 }

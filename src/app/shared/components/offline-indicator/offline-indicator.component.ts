@@ -1,11 +1,15 @@
 // src/app/shared/components/offline-indicator/offline-indicator.component.ts
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { NetworkService } from '../../../core/services/network.service';
-import { SyncService, SyncStatus } from '../../../core/services/sync.service';
+import { SyncService } from '../../../core/services/sync.service';
+import { SyncStatus } from '../../../core/models/syncstatus.model';
 
 @Component({
   selector: 'app-offline-indicator',
+  standalone: true,
+  imports: [CommonModule],
   templateUrl: './offline-indicator.component.html',
   styleUrls: ['./offline-indicator.component.scss'],
 })
@@ -22,13 +26,11 @@ export class OfflineIndicatorComponent implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit(): Promise<void> {
-    // Monitor network status
     const networkSub = this.networkService.isOnline$.subscribe((status) => {
       this.isOnline = status;
     });
     this.subscriptions.push(networkSub);
 
-    // Monitor sync status
     const syncSub = this.syncService
       .getSyncStatus()
       .subscribe((status: SyncStatus) => {
@@ -37,7 +39,6 @@ export class OfflineIndicatorComponent implements OnInit, OnDestroy {
       });
     this.subscriptions.push(syncSub);
 
-    // Initial update
     await this.syncService.updatePendingCount();
   }
 

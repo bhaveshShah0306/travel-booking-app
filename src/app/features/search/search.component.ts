@@ -1,13 +1,21 @@
 // src/app/features/search/search.component.ts
 import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import {
+  FormBuilder,
+  FormGroup,
+  Validators,
+  ReactiveFormsModule,
+} from '@angular/forms';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import { NetworkService } from '../../core/services/network.service';
 import { Ticket } from '../../core/models/ticket.model';
 
 @Component({
   selector: 'app-search',
+  standalone: true,
+  imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './search.component.html',
   styleUrls: ['./search.component.scss'],
 })
@@ -18,7 +26,6 @@ export class SearchComponent implements OnInit {
   isOnline = true;
   isLoading = false;
 
-  // Popular routes for quick search
   popularRoutes = [
     { from: 'Delhi', to: 'Mumbai' },
     { from: 'Delhi', to: 'Bangalore' },
@@ -26,7 +33,6 @@ export class SearchComponent implements OnInit {
     { from: 'Bangalore', to: 'Chennai' },
   ];
 
-  // Available cities
   cities = [
     'Delhi',
     'Mumbai',
@@ -42,7 +48,6 @@ export class SearchComponent implements OnInit {
     'Kochi',
   ];
 
-  // Filter options
   selectedType: 'all' | 'bus' | 'train' | 'flight' = 'all';
   sortBy: 'price' | 'date' | 'seats' = 'price';
 
@@ -86,7 +91,6 @@ export class SearchComponent implements OnInit {
     });
   }
 
-  // Search functionality
   async onSearch(): Promise<void> {
     if (this.searchForm.invalid) {
       this.markFormGroupTouched(this.searchForm);
@@ -118,7 +122,6 @@ export class SearchComponent implements OnInit {
     }
   }
 
-  // Quick search with popular routes
   quickSearch(route: { from: string; to: string }): void {
     this.searchForm.patchValue({
       from: route.from,
@@ -128,7 +131,6 @@ export class SearchComponent implements OnInit {
     this.onSearch();
   }
 
-  // Clear search and show all tickets
   clearSearch(): void {
     this.searchForm.reset();
     this.filteredTickets = [...this.tickets];
@@ -136,28 +138,23 @@ export class SearchComponent implements OnInit {
     this.applyFiltersAndSort();
   }
 
-  // Filter by ticket type
   filterByType(type: 'all' | 'bus' | 'train' | 'flight'): void {
     this.selectedType = type;
     this.applyFiltersAndSort();
   }
 
-  // Sort tickets
   sortTickets(sortBy: 'price' | 'date' | 'seats'): void {
     this.sortBy = sortBy;
     this.applyFiltersAndSort();
   }
 
-  // Apply all filters and sorting
   private applyFiltersAndSort(): void {
     let result = [...this.filteredTickets];
 
-    // Apply type filter
     if (this.selectedType !== 'all') {
       result = result.filter((ticket) => ticket.type === this.selectedType);
     }
 
-    // Apply sorting
     result.sort((a, b) => {
       switch (this.sortBy) {
         case 'price':
@@ -174,7 +171,6 @@ export class SearchComponent implements OnInit {
     this.filteredTickets = result;
   }
 
-  // Navigate to booking
   bookTicket(ticket: Ticket): void {
     if (ticket.availableSeats === 0) {
       alert('❌ No seats available for this ticket');
@@ -183,7 +179,6 @@ export class SearchComponent implements OnInit {
     this.router.navigate(['/booking', ticket.id]);
   }
 
-  // Get ticket type icon
   getTicketIcon(type: string): string {
     switch (type) {
       case 'flight':
@@ -197,7 +192,6 @@ export class SearchComponent implements OnInit {
     }
   }
 
-  // Helper to mark form as touched
   private markFormGroupTouched(formGroup: FormGroup): void {
     Object.keys(formGroup.controls).forEach((key) => {
       const control = formGroup.get(key);
@@ -205,12 +199,10 @@ export class SearchComponent implements OnInit {
     });
   }
 
-  // Get min date for date picker (today)
   get minDate(): string {
     return new Date().toISOString().split('T')[0];
   }
 
-  // Get form controls for template
   get f() {
     return this.searchForm.controls;
   }

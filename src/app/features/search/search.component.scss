@@ -461,3 +461,128 @@
     }
   }
 }
+// Add these styles to the end of search.component.scss
+
+// ========== SIMPLE TICKET CARDS ==========
+.tickets-grid-simple {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 24px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-card-simple {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: white;
+
+    &:hover {
+      transform: translateY(-5px);
+      background: rgba(255, 255, 255, 0.25);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    }
+
+    .ticket-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+
+      .ticket-type {
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.2);
+
+        &.train {
+          background: rgba(52, 152, 219, 0.3);
+        }
+        &.bus {
+          background: rgba(46, 213, 115, 0.3);
+        }
+        &.flight {
+          background: rgba(155, 89, 182, 0.3);
+        }
+      }
+
+      .ticket-price {
+        font-size: 1.5rem;
+        font-weight: bold;
+      }
+    }
+
+    .ticket-route {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 15px;
+
+      .location {
+        display: flex;
+        flex-direction: column;
+
+        .location-label {
+          font-size: 0.75rem;
+          opacity: 0.7;
+        }
+
+        .location-name {
+          font-size: 1.1rem;
+          font-weight: 600;
+        }
+      }
+
+      .arrow {
+        font-size: 1.5rem;
+        opacity: 0.5;
+      }
+    }
+
+    .ticket-footer {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      opacity: 0.8;
+      margin-bottom: 15px;
+
+      .ticket-seats.low {
+        color: #ff6b6b;
+        font-weight: 600;
+      }
+    }
+
+    .book-btn {
+      width: 100%;
+      padding: 12px;
+      background: rgba(46, 213, 115, 0.9);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+
+      &:hover:not(:disabled) {
+        background: rgba(46, 213, 115, 1);
+        transform: translateY(-2px);
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        background: rgba(255, 107, 107, 0.5);
+      }
+    }
+  }
+}

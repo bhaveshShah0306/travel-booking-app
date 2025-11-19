@@ -4,8 +4,8 @@
     <span class="status-text">
       {{ isOnline ? "Online" : "Offline Mode" }}
     </span>
-    <span class="pending-badge" *ngIf="pendingCount > 0">
-      {{ pendingCount }} pending
-    </span>
+    @if(pendingCount >0 ) {
+    <span class="pending-badge"> {{ pendingCount }} pending </span>
+    }
   </div>
 </div>
