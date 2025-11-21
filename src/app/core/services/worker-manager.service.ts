@@ -286,5 +286,6 @@ export class WorkerManagerService implements OnDestroy {
   ngOnDestroy(): void {
     this.terminateWorker();
     this.responseSubject.complete();
+    this.networkSubscription?.unsubscribe();
   }
 }
