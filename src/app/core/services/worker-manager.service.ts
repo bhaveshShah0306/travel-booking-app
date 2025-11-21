@@ -13,7 +13,8 @@ import {
 } from '../models/worker-message.model';
 import { BatchUpdate } from '../models/batch-update.model';
 import { WorkerResponse } from '../models/worker-response.model';
-import { DataStoreService, WorkerEvent } from './data-store.service';
+import { DataStoreService } from './data-store.service';
+import { WorkerEvent } from '../models/worker-event.model';
 
 interface SyncResult {
   successful: number;

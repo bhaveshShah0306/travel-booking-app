@@ -3,7 +3,7 @@ import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 import { SyncStatus } from '../models/syncstatus.model';
-
+import { WorkerEvent } from '../models/worker-event.model';
 /**
  * ✅ CORRECTED: Removed invalid 'progress' property
  * Lightweight reactive data store for application state
@@ -190,18 +190,4 @@ export class DataStoreService implements OnDestroy {
     this.state$.next(initialState);
     console.log('[DataStore] 🔄 State reset to initial');
   }
-}
-
-// ========== TYPES ==========
-
-export interface WorkerEvent {
-  type:
-    | 'BOOKING_SAVED'
-    | 'BOOKING_UPDATED'
-    | 'BOOKING_DELETED'
-    | 'STATS_CHANGED'
-    | 'SYNC_PROGRESS'
-    | 'SYNC_COMPLETED';
-  data: any;
-  timestamp: number;
 }

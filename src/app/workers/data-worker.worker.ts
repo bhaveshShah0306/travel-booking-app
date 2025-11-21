@@ -46,7 +46,6 @@ type WorkerMessageType =
   | 'BATCH_UPDATE'
   | 'ANALYZE_DATA';
 
-// ✅ NEW: Event types for broadcasting
 type WorkerEventType =
   | 'BOOKING_SAVED'
   | 'BOOKING_UPDATED'
@@ -69,7 +68,6 @@ interface WorkerResponse<T = unknown> {
   error?: string;
 }
 
-// ✅ NEW: Worker Event for broadcasting changes
 interface WorkerEvent {
   type: WorkerEventType;
   data: any;
@@ -102,7 +100,6 @@ function broadcastEvent(type: WorkerEventType, data: any): void {
     timestamp: Date.now(),
   };
 
-  // Send as a special "EVENT" message
   postMessage({
     id: 'EVENT',
     type: 'EVENT' as any,
@@ -150,16 +147,28 @@ async function initDatabase(): Promise<void> {
   }
 }
 
+// ✅ FIXED: Respect the syncStatus passed from the component
 async function saveBooking(booking: Booking): Promise<number> {
-  booking.createdAt = new Date();
-  booking.syncStatus = 'pending';
+  // ✅ Set createdAt if not already set
+  if (!booking.createdAt) {
+    booking.createdAt = new Date();
+  }
+
+  // ✅ CRITICAL FIX: Don't override syncStatus - use what was passed
+  // The component already sets it based on navigator.onLine
+  // booking.syncStatus is already set by BookingComponent
+
   const id = await db.bookings.add(booking);
 
-  console.log('[Worker] Booking saved:', id);
+  console.log('[Worker] 💾 Booking saved:', {
+    id,
+    status: booking.status,
+    syncStatus: booking.syncStatus,
+  });
 
-  // ✅ Broadcast event
+  // ✅ Broadcast event with updated stats
   const stats = await getStats();
-  broadcastEvent('BOOKING_SAVED', { bookingId: id, stats });
+  broadcastEvent('BOOKING_SAVED', { bookingId: id, booking, stats });
 
   return id;
 }
@@ -215,6 +224,7 @@ async function cacheTickets(tickets: Ticket[]): Promise<void> {
   console.log(`[Worker] ${tickets.length} tickets cached`);
 }
 
+// ✅ FIXED: More detailed stats logging
 async function getStats(): Promise<{
   bookings: number;
   tickets: number;
@@ -227,11 +237,30 @@ async function getStats(): Promise<{
     .equals('pending')
     .count();
 
-  return {
+  const stats = {
     bookings: bookingsCount,
     tickets: ticketsCount,
     pendingSync: pendingCount,
   };
+
+  // ✅ Log detailed breakdown for debugging
+  const allBookings = await db.bookings.toArray();
+  const breakdown = {
+    byStatus: {
+      pending: allBookings.filter((b) => b.status === 'pending').length,
+      confirmed: allBookings.filter((b) => b.status === 'confirmed').length,
+      cancelled: allBookings.filter((b) => b.status === 'cancelled').length,
+    },
+    bySyncStatus: {
+      pending: allBookings.filter((b) => b.syncStatus === 'pending').length,
+      synced: allBookings.filter((b) => b.syncStatus === 'synced').length,
+      failed: allBookings.filter((b) => b.syncStatus === 'failed').length,
+    },
+  };
+
+  console.log('[Worker] 📊 Stats:', stats, 'Breakdown:', breakdown);
+
+  return stats;
 }
 
 // ==================== SYNC ENGINE ====================
@@ -248,7 +277,7 @@ async function syncPendingBookings(): Promise<SyncResult> {
     .equals('pending')
     .toArray();
 
-  console.log(`[Worker] Syncing ${pendingBookings.length} pending bookings`);
+  console.log(`[Worker] 🔄 Syncing ${pendingBookings.length} pending bookings`);
 
   const results: SyncResult = {
     successful: 0,
@@ -260,7 +289,6 @@ async function syncPendingBookings(): Promise<SyncResult> {
   for (let i = 0; i < pendingBookings.length; i += batchSize) {
     const batch = pendingBookings.slice(i, i + batchSize);
 
-    // ✅ Broadcast progress
     broadcastEvent('SYNC_PROGRESS', {
       current: i,
       total: pendingBookings.length,
@@ -297,10 +325,9 @@ async function syncPendingBookings(): Promise<SyncResult> {
   }
 
   console.log(
-    `[Worker] Sync complete: ${results.successful} successful, ${results.failed} failed`
+    `[Worker] ✅ Sync complete: ${results.successful} successful, ${results.failed} failed`
   );
 
-  // ✅ Broadcast completion
   const stats = await getStats();
   broadcastEvent('SYNC_COMPLETED', { results, stats });
 
@@ -326,7 +353,6 @@ async function batchUpdateBookings(updates: BatchUpdate[]): Promise<number> {
 
   console.log(`[Worker] Batch updated ${updateCount} bookings`);
 
-  // ✅ Broadcast stats change
   const stats = await getStats();
   broadcastEvent('STATS_CHANGED', stats);
 

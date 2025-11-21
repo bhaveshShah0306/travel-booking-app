@@ -135,7 +135,7 @@ export class BookingComponent implements OnInit, OnDestroy {
       ticketId: this.ticket.id,
       passengers: this.bookingForm.value.passengers,
       totalAmount: this.ticket.price * this.passengers.length,
-      status: 'pending',
+      status: this.isOnline ? 'confirmed' : 'pending', // ✅ Confirmed if online
       createdAt: new Date(),
       syncStatus: this.isOnline ? 'synced' : 'pending',
     };
