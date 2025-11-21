@@ -2,10 +2,11 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
+import { SyncStatus } from '../models/syncstatus.model';
 
 /**
+ * ✅ CORRECTED: Removed invalid 'progress' property
  * Lightweight reactive data store for application state
- * Listens to Worker events and provides observables for components
  */
 
 export interface AppState {
@@ -16,11 +17,7 @@ export interface AppState {
     cancelled: number;
     needsSync: number;
   };
-  sync: {
-    isSyncing: boolean;
-    progress: number;
-    lastSyncTime: Date | null;
-  };
+  sync: SyncStatus; // Uses the actual SyncStatus interface
   network: {
     isOnline: boolean;
   };
@@ -36,8 +33,10 @@ const initialState: AppState = {
   },
   sync: {
     isSyncing: false,
-    progress: 0,
     lastSyncTime: null,
+    pendingCount: 0,
+    failedCount: 0,
+    syncErrors: [],
   },
   network: {
     isOnline: navigator.onLine,
@@ -56,12 +55,10 @@ export class DataStoreService implements OnDestroy {
 
   // ========== PUBLIC OBSERVABLES ==========
 
-  // Full state
   getState$(): Observable<AppState> {
     return this.state$.asObservable();
   }
 
-  // Booking stats
   getBookingStats$(): Observable<AppState['bookings']> {
     return this.state$.pipe(
       map((state) => state.bookings),
@@ -71,8 +68,7 @@ export class DataStoreService implements OnDestroy {
     );
   }
 
-  // Sync status
-  getSyncStatus$(): Observable<AppState['sync']> {
+  getSyncStatus$(): Observable<SyncStatus> {
     return this.state$.pipe(
       map((state) => state.sync),
       distinctUntilChanged(
@@ -81,7 +77,6 @@ export class DataStoreService implements OnDestroy {
     );
   }
 
-  // Network status
   getNetworkStatus$(): Observable<boolean> {
     return this.state$.pipe(
       map((state) => state.network.isOnline),
@@ -89,7 +84,6 @@ export class DataStoreService implements OnDestroy {
     );
   }
 
-  // Pending sync count
   getPendingSyncCount$(): Observable<number> {
     return this.state$.pipe(
       map((state) => state.bookings.needsSync),
@@ -97,7 +91,6 @@ export class DataStoreService implements OnDestroy {
     );
   }
 
-  // Worker events stream
   getEvents$(): Observable<WorkerEvent> {
     return this.events$.asObservable();
   }
@@ -111,9 +104,14 @@ export class DataStoreService implements OnDestroy {
       bookings: { ...currentState.bookings, ...stats },
     });
     console.log('[DataStore] 📊 Booking stats updated:', stats);
+
+    // Update sync.pendingCount when needsSync changes
+    if (stats.needsSync !== undefined) {
+      this.updateSyncStatus({ pendingCount: stats.needsSync });
+    }
   }
 
-  updateSyncStatus(sync: Partial<AppState['sync']>): void {
+  updateSyncStatus(sync: Partial<SyncStatus>): void {
     const currentState = this.state$.value;
     this.state$.next({
       ...currentState,
@@ -152,17 +150,18 @@ export class DataStoreService implements OnDestroy {
         break;
 
       case 'SYNC_PROGRESS':
+        // ✅ FIXED: Only update isSyncing, no progress property
         this.updateSyncStatus({
           isSyncing: true,
-          progress: event.data.percentage || 0,
         });
         break;
 
       case 'SYNC_COMPLETED':
         this.updateSyncStatus({
           isSyncing: false,
-          progress: 100,
           lastSyncTime: new Date(),
+          failedCount: event.data.results?.failed || 0,
+          syncErrors: event.data.results?.errors || [],
         });
         if (event.data.stats) {
           this.updateBookingStats({
