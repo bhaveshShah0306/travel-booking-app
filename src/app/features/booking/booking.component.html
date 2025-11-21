@@ -1,3 +1,5 @@
+<!-- src/app/features/booking/booking.component.html -->
+<!-- ✅ Angular 18 Modern Control Flow Syntax -->
 <div class="booking-container">
   <div class="booking-header">
     <button
@@ -11,28 +13,27 @@
     <h1>Book Your Ticket</h1>
   </div>
 
-  <div
-    class="ticket-summary"
-    *ngIf="ticket"
-    role="region"
-    aria-label="Ticket Summary"
-  >
+  @if (ticket) {
+  <div class="ticket-summary" role="region" aria-label="Ticket Summary">
     <div class="summary-row">
       <span class="label">Route:</span>
-      <span class="value"> {{ ticket!.from }} → {{ ticket!.to }} </span>
+      <span class="value"> {{ ticket.from }} → {{ ticket.to }} </span>
     </div>
     <div class="summary-row">
       <span class="label">Date:</span>
       <span class="value">
-        {{ ticket!.date | date : "mediumDate" }}
+        {{ ticket.date | date : "mediumDate" }}
       </span>
     </div>
     <div class="summary-row">
       <span class="label">Price per seat:</span>
-      <span class="value"> ₹{{ ticket!.price }} </span>
+      <span class="value"> ₹{{ ticket.price }} </span>
     </div>
   </div>
+  }
 
+  <!-- ✅ Angular 18: @if instead of *ngIf -->
+  @if (bookingForm) {
   <form
     [formGroup]="bookingForm"
     (ngSubmit)="submitBooking()"
@@ -48,8 +49,8 @@
       role="region"
       aria-labelledby="passenger-section"
     >
+      @for (passenger of passengers.controls; track $index; let i = $index) {
       <div
-        *ngFor="let passenger of passengers.controls; let i = index"
         class="passenger-card"
         [formGroupName]="i"
         role="region"
@@ -57,16 +58,17 @@
       >
         <div class="passenger-header">
           <h3>Passenger {{ i + 1 }} of {{ passengers.length }}</h3>
+          @if (passengers.length > 1) {
           <button
             type="button"
             class="remove-btn"
-            *ngIf="passengers.length > 1"
             (click)="removePassenger(i)"
             [attr.aria-label]="'Remove passenger ' + (i + 1)"
             title="Remove this passenger"
           >
             🗑️ Remove
           </button>
+          }
         </div>
 
         <div class="form-group">
@@ -80,16 +82,12 @@
             [attr.aria-describedby]="'name-error-' + i"
             required
           />
-          <span
-            [id]="'name-error-' + i"
-            class="error"
-            role="alert"
-            *ngIf="
-              passenger.get('name')?.invalid && passenger.get('name')?.touched
-            "
-          >
+          @if (passenger.get('name')?.invalid && passenger.get('name')?.touched)
+          {
+          <span [id]="'name-error-' + i" class="error" role="alert">
             Name is required (minimum 3 characters)
           </span>
+          }
         </div>
 
         <div class="form-row">
@@ -106,16 +104,12 @@
               [attr.aria-describedby]="'age-error-' + i"
               required
             />
-            <span
-              [id]="'age-error-' + i"
-              class="error"
-              role="alert"
-              *ngIf="
-                passenger.get('age')?.invalid && passenger.get('age')?.touched
-              "
-            >
+            @if (passenger.get('age')?.invalid && passenger.get('age')?.touched)
+            {
+            <span [id]="'age-error-' + i" class="error" role="alert">
               Valid age required (1-120 years)
             </span>
+            }
           </div>
 
           <div class="form-group">
@@ -132,33 +126,30 @@
               <option value="female">Female</option>
               <option value="other">Other</option>
             </select>
-            <span
-              [id]="'gender-error-' + i"
-              class="error"
-              role="alert"
-              *ngIf="
-                passenger.get('gender')?.invalid &&
-                passenger.get('gender')?.touched
-              "
-            >
+            @if (passenger.get('gender')?.invalid &&
+            passenger.get('gender')?.touched) {
+            <span [id]="'gender-error-' + i" class="error" role="alert">
               Gender selection is required
             </span>
+            }
           </div>
         </div>
       </div>
+      }
     </div>
 
+    @if (passengers.length < 5) {
     <button
       type="button"
       class="add-passenger-btn"
       (click)="addPassenger()"
-      *ngIf="passengers.length < 5"
       [attr.aria-label]="
         'Add passenger, currently ' + passengers.length + ' passenger(s)'
       "
     >
       ➕ Add Passenger
     </button>
+    }
 
     <div class="total-section" role="region" aria-label="Booking Summary">
       <div class="total-row">
@@ -170,11 +161,13 @@
       </div>
     </div>
 
-    <div class="offline-notice" role="status" *ngIf="!isOnline">
+    @if (!isOnline) {
+    <div class="offline-notice" role="status">
       <span>
         📴 You're offline. Booking will be saved locally and synced when online.
       </span>
     </div>
+    }
 
     <button
       type="submit"
@@ -197,4 +190,10 @@
       }}
     </button>
   </form>
+
+  } @else {
+  <div class="loading-form">
+    <p>Loading booking form...</p>
+  </div>
+  }
 </div>

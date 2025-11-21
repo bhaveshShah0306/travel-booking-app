@@ -1,42 +1,61 @@
-:host {
-  display: block;
-  margin: 16px;
-}
-
 .ticket-card {
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: transform 0.2s ease;
-
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-  }
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: white;
 }
 
-// These styles WILL cascade to the None-encapsulated child component
-// and override Angular Material's default button styles
-::ng-deep {
-  // Override Material button styles within this shadow boundary
-  .mat-raised-button {
-    border-radius: 20px !important;
-    text-transform: uppercase;
-    font-weight: 600;
-    letter-spacing: 1px;
-  }
+.ticket-card:hover {
+  transform: translateY(-5px);
+  background: rgba(255, 255, 255, 0.25);
+}
 
-  .mat-button-base {
-    min-width: 120px !important;
-  }
+.ticket-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
 
-  // Custom themed buttons
-  .mat-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-    color: white !important;
-  }
+.ticket-type {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.2);
+}
 
-  .mat-accent {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
-    color: white !important;
-  }
+.ticket-price {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.ticket-route {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.city {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.arrow {
+  font-size: 1.5rem;
+  opacity: 0.5;
+}
+
+.ticket-date {
+  margin-bottom: 10px;
+  opacity: 0.8;
+}
+
+.ticket-seats {
+  font-size: 0.9rem;
+  opacity: 0.8;
 }

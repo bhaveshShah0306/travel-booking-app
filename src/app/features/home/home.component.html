@@ -1,3 +1,5 @@
+<!-- src/app/features/home/home.component.html -->
+<!-- ✅ Angular 18 Modern Control Flow Syntax -->
 <div class="home-container">
   <div class="header">
     <h1>🎫 Travel Booking</h1>
@@ -26,11 +28,8 @@
   <div class="tickets-section">
     <h2>🚆 Available Tickets</h2>
     <div class="tickets-grid">
-      <div
-        class="ticket-card"
-        *ngFor="let ticket of tickets"
-        (click)="bookTicket(ticket)"
-      >
+      @for (ticket of tickets; track ticket.id) {
+      <div class="ticket-card" (click)="bookTicket(ticket)">
         <div class="ticket-header">
           <span class="ticket-type" [class]="ticket.type">
             {{
@@ -62,6 +61,7 @@
           <span class="ticket-seats">{{ ticket.availableSeats }} seats</span>
         </div>
       </div>
+      }
     </div>
   </div>
 

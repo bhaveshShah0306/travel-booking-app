@@ -23,8 +23,9 @@ import { Subscription } from 'rxjs';
   styleUrls: ['./booking.component.scss'],
 })
 export class BookingComponent implements OnInit, OnDestroy {
-  bookingForm!: FormGroup;
-  ticket!: Ticket;
+  // ✅ CRITICAL: Initialize form immediately to prevent template errors
+  bookingForm: FormGroup;
+  ticket: Ticket | null = null;
   isOnline = true;
   isSubmitting = false;
 
@@ -36,17 +37,17 @@ export class BookingComponent implements OnInit, OnDestroy {
     public router: Router,
     private offlineStorage: OfflineStorageService,
     private networkService: NetworkService
-  ) {}
+  ) {
+    // ✅ CRITICAL: Initialize form in constructor BEFORE template renders
+    this.bookingForm = this.fb.group({
+      passengers: this.fb.array([this.createPassengerForm()]),
+    });
+  }
 
   async ngOnInit(): Promise<void> {
-    const ticketId = this.route.snapshot.paramMap.get('ticketId');
-    if (ticketId) {
-      const loadedTicket = await this.offlineStorage.getTicketById(ticketId);
-      if (loadedTicket) {
-        this.ticket = loadedTicket;
-      }
-    }
+    // Form is already initialized in constructor
 
+    // Monitor network status
     const networkSub = this.networkService.isOnline$.subscribe(
       (status): void => {
         this.isOnline = status;
@@ -54,8 +55,24 @@ export class BookingComponent implements OnInit, OnDestroy {
     );
     this.subscriptions.push(networkSub);
 
-    this.initForm();
+    // Load ticket data
+    const ticketId = this.route.snapshot.paramMap.get('ticketId');
+    if (ticketId) {
+      const loadedTicket = await this.offlineStorage.getTicketById(ticketId);
+      if (loadedTicket) {
+        this.ticket = loadedTicket;
+      } else {
+        alert('❌ Ticket not found');
+        this.router.navigate(['/']);
+        return;
+      }
+    } else {
+      alert('❌ Invalid ticket ID');
+      this.router.navigate(['/']);
+      return;
+    }
 
+    // Focus on main heading for accessibility
     setTimeout(() => {
       const mainHeading = document.querySelector('h1');
       if (mainHeading instanceof HTMLElement) {
@@ -66,12 +83,6 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subscriptions.forEach((sub) => sub.unsubscribe());
-  }
-
-  private initForm(): void {
-    this.bookingForm = this.fb.group({
-      passengers: this.fb.array([this.createPassengerForm()]),
-    });
   }
 
   private createPassengerForm(): FormGroup {
@@ -111,6 +122,7 @@ export class BookingComponent implements OnInit, OnDestroy {
       this.announceToScreenReader(
         'Please fill all required fields before submitting'
       );
+      this.markFormGroupTouched(this.bookingForm);
       return;
     }
 
@@ -129,8 +141,8 @@ export class BookingComponent implements OnInit, OnDestroy {
       const bookingId = await this.offlineStorage.saveBooking(booking);
 
       const message = this.isOnline
-        ? `Booking confirmed! Booking ID: ${bookingId}`
-        : `Booking saved offline (ID: ${bookingId}). Will sync when online.`;
+        ? `✅ Booking confirmed! Booking ID: ${bookingId}`
+        : `💾 Booking saved offline (ID: ${bookingId}). Will sync when online.`;
 
       this.announceToScreenReader(message);
       alert(message);
@@ -161,5 +173,16 @@ export class BookingComponent implements OnInit, OnDestroy {
     setTimeout(() => {
       announcement.remove();
     }, 1000);
+  }
+
+  private markFormGroupTouched(formGroup: FormGroup | FormArray): void {
+    Object.keys(formGroup.controls).forEach((key) => {
+      const control = formGroup.get(key);
+      control?.markAsTouched();
+
+      if (control instanceof FormGroup || control instanceof FormArray) {
+        this.markFormGroupTouched(control);
+      }
+    });
   }
 }

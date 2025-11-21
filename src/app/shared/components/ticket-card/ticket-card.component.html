@@ -1,20 +1,18 @@
-<!-- Material Card with custom child component -->
-<mat-card class="ticket-card">
-  <mat-card-header>
-    <mat-card-title>{{ ticket.from }} → {{ ticket.to }}</mat-card-title>
-    <mat-card-subtitle>{{
-      ticket.date | date : "mediumDate"
-    }}</mat-card-subtitle>
-  </mat-card-header>
+<div class="ticket-card" (click)="onBookTicket()">
+  <div class="ticket-header">
+    <span class="ticket-type">{{ ticket.type | uppercase }}</span>
+    <span class="ticket-price">₹{{ ticket.price }}</span>
+  </div>
 
-  <mat-card-content>
-    <!-- Child component with None encapsulation -->
-    <app-ticket-actions
-      [ticketType]="ticket.type"
-      [price]="ticket.price"
-      [availableSeats]="ticket.availableSeats"
-      (book)="onBookTicket()"
-    >
-    </app-ticket-actions>
-  </mat-card-content>
-</mat-card>
+  <div class="ticket-route">
+    <span class="city">{{ ticket.from }}</span>
+    <span class="arrow">→</span>
+    <span class="city">{{ ticket.to }}</span>
+  </div>
+
+  <div class="ticket-date">
+    {{ ticket.date | date : "mediumDate" }}
+  </div>
+
+  <div class="ticket-seats">{{ ticket.availableSeats }} seats available</div>
+</div>
