@@ -1,5 +1,7 @@
 // src/app/core/services/worker-manager.service.ts
-import { Injectable, OnDestroy } from '@angular/core';
+// ✅ FIXED: Added NgZone integration for proper change detection
+
+import { Injectable, OnDestroy, NgZone } from '@angular/core';
 import { Observable, Subject, firstValueFrom } from 'rxjs';
 import { filter, map, timeout } from 'rxjs/operators';
 import { Booking } from '../models/booking.model';
@@ -36,7 +38,10 @@ export class WorkerManagerService implements OnDestroy {
   private messageCounter = 0;
   private readonly DEFAULT_TIMEOUT = 30000;
 
-  constructor(private dataStore: DataStoreService) {
+  constructor(
+    private dataStore: DataStoreService,
+    private ngZone: NgZone // ✅ ADDED: NgZone for change detection
+  ) {
     this.initializeWorker();
   }
 
@@ -50,22 +55,27 @@ export class WorkerManagerService implements OnDestroy {
           { type: 'module' }
         );
 
+        // ✅ CRITICAL FIX: Wrap worker message handling in NgZone
         this.worker.onmessage = ({ data }: MessageEvent<WorkerResponse>) => {
-          // ✅ Check if it's an event broadcast
-          if (data.id === 'EVENT' && data.type === ('EVENT' as any)) {
-            const event = data.data as WorkerEvent;
-            console.log('[WorkerManager] 📢 Worker event received:', event);
-            this.dataStore.handleWorkerEvent(event);
-            return;
-          }
+          this.ngZone.run(() => {
+            // Check if it's an event broadcast
+            if (data.id === 'EVENT' && data.type === ('EVENT' as any)) {
+              const event = data.data as WorkerEvent;
+              console.log('[WorkerManager] 📢 Worker event (in zone):', event);
+              this.dataStore.handleWorkerEvent(event);
+              return;
+            }
 
-          // Regular response
-          console.log('[WorkerManager] Received response:', data);
-          this.responseSubject.next(data);
+            // Regular response
+            console.log('[WorkerManager] Response (in zone):', data);
+            this.responseSubject.next(data);
+          });
         };
 
         this.worker.onerror = (error) => {
-          console.error('[WorkerManager] Worker error:', error);
+          this.ngZone.run(() => {
+            console.error('[WorkerManager] Worker error:', error);
+          });
         };
 
         // Initialize database in worker
@@ -73,12 +83,12 @@ export class WorkerManagerService implements OnDestroy {
           console.error('Failed to init worker DB:', err)
         );
 
-        console.log('✅ Web Worker initialized successfully');
+        console.log('✅ Web Worker initialized with NgZone integration');
       } catch (error) {
         console.error('❌ Failed to initialize Web Worker:', error);
       }
     } else {
-      console.warn('⚠️ Web Workers are not supported in this environment');
+      console.warn('⚠️ Web Workers are not supported');
     }
   }
 
@@ -178,7 +188,7 @@ export class WorkerManagerService implements OnDestroy {
       pendingSync: number;
     }>('GET_STATS');
 
-    // ✅ Update data store with latest stats
+    // Update data store with latest stats
     this.dataStore.updateBookingStats({
       total: stats.bookings,
       needsSync: stats.pendingSync,

@@ -1,5 +1,5 @@
 // src/app/features/booking/booking.component.ts
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   FormBuilder,
@@ -14,6 +14,7 @@ import { NetworkService } from '../../core/services/network.service';
 import { Ticket } from '../../core/models/ticket.model';
 import { Booking } from '../../core/models/booking.model';
 import { Subscription } from 'rxjs';
+import { WorkerManagerService } from '../../core/services/worker-manager.service';
 
 @Component({
   selector: 'app-booking',
@@ -36,7 +37,9 @@ export class BookingComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     public router: Router,
     private offlineStorage: OfflineStorageService,
-    private networkService: NetworkService
+    private networkService: NetworkService,
+    private ngZone: NgZone,
+    private workerManager: WorkerManagerService
   ) {
     // ✅ CRITICAL: Initialize form in constructor BEFORE template renders
     this.bookingForm = this.fb.group({
@@ -138,20 +141,30 @@ export class BookingComponent implements OnInit, OnDestroy {
     };
 
     try {
-      const bookingId = await this.offlineStorage.saveBooking(booking);
+      const bookingId = await this.workerManager.saveBooking(booking);
+      console.log('[Booking] ✅ Booking saved with ID:', bookingId);
 
-      const message = this.isOnline
-        ? `✅ Booking confirmed! Booking ID: ${bookingId}`
-        : `💾 Booking saved offline (ID: ${bookingId}). Will sync when online.`;
+      this.ngZone.run(() => {
+        const message = this.isOnline
+          ? `✅ Booking confirmed! Booking ID: ${bookingId}`
+          : `💾 Booking saved offline (ID: ${bookingId}). Will sync when online.`;
 
-      this.announceToScreenReader(message);
-      alert(message);
-      this.router.navigate(['/my-bookings']);
+        this.announceToScreenReader(message);
+        alert(message);
+
+        // ✅ Navigate with slight delay to ensure alert is visible
+        setTimeout(() => {
+          this.router.navigate(['/my-bookings']);
+        }, 100);
+      });
     } catch (error) {
-      const errorMessage = 'Failed to save booking';
-      this.announceToScreenReader(errorMessage);
-      alert(`❌ ${errorMessage}`);
-      console.error(error);
+      // ✅ IMPROVED: Error handling inside NgZone
+      this.ngZone.run(() => {
+        const errorMessage = 'Failed to save booking';
+        this.announceToScreenReader(errorMessage);
+        alert(`❌ ${errorMessage}`);
+        console.error('[Booking] ❌ Error:', error);
+      });
     } finally {
       this.isSubmitting = false;
     }

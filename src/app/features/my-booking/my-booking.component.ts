@@ -1,8 +1,11 @@
 // src/app/features/my-booking/my-booking.component.ts
-import { Component, OnInit, OnDestroy } from '@angular/core';
+// ✅ FIXED: Real-time stats updates from DataStore + proper event handling
+
+import { Component, OnInit, OnDestroy, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { Subscription, combineLatest } from 'rxjs';
+import { WorkerManagerService } from '../../core/services/worker-manager.service';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import { NetworkService } from '../../core/services/network.service';
 import { SyncService } from '../../core/services/sync.service';
@@ -26,7 +29,7 @@ export class MyBookingComponent implements OnInit, OnDestroy {
   filteredBookings: BookingWithTicket[] = [];
   isOnline = true;
   isLoading = false;
-  isSyncing = false; // ✅ Removed syncProgress property
+  isSyncing = false;
 
   selectedStatus: 'all' | 'pending' | 'confirmed' | 'cancelled' = 'all';
 
@@ -42,10 +45,12 @@ export class MyBookingComponent implements OnInit, OnDestroy {
 
   constructor(
     private router: Router,
+    private workerManager: WorkerManagerService, // ✅ ADDED: Use WorkerManager
     private offlineStorage: OfflineStorageService,
     private networkService: NetworkService,
     private syncService: SyncService,
-    private dataStore: DataStoreService
+    private dataStore: DataStoreService,
+    private ngZone: NgZone // ✅ ADDED: NgZone for UI updates
   ) {}
 
   async ngOnInit(): Promise<void> {
@@ -66,22 +71,30 @@ export class MyBookingComponent implements OnInit, OnDestroy {
   // ==================== REACTIVE STATE SUBSCRIPTIONS ====================
 
   private subscribeToState(): void {
-    // Subscribe to booking stats
+    // ✅ FIXED: Subscribe to DataStore stats for real-time updates
     const statsSub = this.dataStore.getBookingStats$().subscribe((stats) => {
-      console.log('[MyBookings] 📊 Booking stats updated:', stats);
-      this.stats = {
-        ...this.stats,
-        total: stats.total,
-        needsSync: stats.needsSync,
-      };
+      console.log('[MyBookings] 📊 DataStore stats updated:', stats);
+
+      // ✅ Update stats from DataStore (real-time source of truth)
+      this.ngZone.run(() => {
+        this.stats = {
+          ...this.stats,
+          total: stats.total,
+          needsSync: stats.needsSync,
+        };
+
+        // Recalculate local stats if we have bookings loaded
+        if (this.bookings.length > 0) {
+          this.calculateLocalStats();
+        }
+      });
     });
     this.subscriptions.push(statsSub);
 
-    // ✅ FIXED: Only subscribe to isSyncing, no progress property
+    // Subscribe to sync status
     const syncSub = this.dataStore.getSyncStatus$().subscribe((syncStatus) => {
       console.log('[MyBookings] 🔄 Sync status updated:', syncStatus);
       this.isSyncing = syncStatus.isSyncing;
-      // No more: this.syncProgress = syncStatus.progress;
     });
     this.subscriptions.push(syncSub);
 
@@ -92,20 +105,36 @@ export class MyBookingComponent implements OnInit, OnDestroy {
     });
     this.subscriptions.push(networkSub);
 
-    // Subscribe to worker events for real-time updates
+    // ✅ IMPROVED: Subscribe to worker events for immediate refresh
     const eventsSub = this.dataStore.getEvents$().subscribe(async (event) => {
-      console.log('[MyBookings] 📢 Worker event received:', event);
+      console.log('[MyBookings] 📢 Worker event received:', event.type);
 
-      if (
-        [
-          'BOOKING_SAVED',
-          'BOOKING_UPDATED',
-          'BOOKING_DELETED',
-          'SYNC_COMPLETED',
-        ].includes(event.type)
-      ) {
-        console.log('[MyBookings] 🔄 Reloading bookings due to:', event.type);
-        await this.loadBookings();
+      // Reload bookings on any data change
+      switch (event.type) {
+        case 'BOOKING_SAVED':
+          console.log('[MyBookings] 🆕 New booking, reloading...');
+          await this.loadBookings();
+          break;
+
+        case 'BOOKING_UPDATED':
+          console.log('[MyBookings] ✏️ Booking updated, reloading...');
+          await this.loadBookings();
+          break;
+
+        case 'BOOKING_DELETED':
+          console.log('[MyBookings] 🗑️ Booking deleted, reloading...');
+          await this.loadBookings();
+          break;
+
+        case 'SYNC_COMPLETED':
+          console.log('[MyBookings] 🔄 Sync completed, reloading...');
+          await this.loadBookings();
+          break;
+
+        case 'STATS_CHANGED':
+          console.log('[MyBookings] 📊 Stats changed, reloading...');
+          await this.loadBookings();
+          break;
       }
     });
     this.subscriptions.push(eventsSub);
@@ -145,7 +174,9 @@ export class MyBookingComponent implements OnInit, OnDestroy {
       );
 
       this.filteredBookings = [...this.bookings];
-      this.calculateStats();
+
+      // ✅ Calculate stats from loaded bookings
+      this.calculateLocalStats();
       this.applyFilters();
 
       console.log('[MyBookings] ✅ Loaded', this.bookings.length, 'bookings');
@@ -157,22 +188,25 @@ export class MyBookingComponent implements OnInit, OnDestroy {
     }
   }
 
-  private calculateStats(): void {
-    this.stats.total = this.bookings.length;
-    this.stats.pending = this.bookings.filter(
-      (b) => b.status === 'pending'
-    ).length;
-    this.stats.confirmed = this.bookings.filter(
+  // ✅ RENAMED: Separate local stats calculation from DataStore updates
+  private calculateLocalStats(): void {
+    const pending = this.bookings.filter((b) => b.status === 'pending').length;
+    const confirmed = this.bookings.filter(
       (b) => b.status === 'confirmed'
     ).length;
-    this.stats.cancelled = this.bookings.filter(
+    const cancelled = this.bookings.filter(
       (b) => b.status === 'cancelled'
     ).length;
-    this.stats.needsSync = this.bookings.filter(
-      (b) => b.syncStatus === 'pending'
-    ).length;
 
-    console.log('[MyBookings] 📊 Calculated stats:', this.stats);
+    // ✅ Update local computed stats only (total and needsSync come from DataStore)
+    this.stats = {
+      ...this.stats, // Keep DataStore values (total, needsSync)
+      pending,
+      confirmed,
+      cancelled,
+    };
+
+    console.log('[MyBookings] 📊 Local stats calculated:', this.stats);
   }
 
   // ==================== FILTERS ====================
@@ -206,23 +240,26 @@ export class MyBookingComponent implements OnInit, OnDestroy {
 
     try {
       if (booking.id !== undefined) {
-        const updateCount = await this.offlineStorage.updateBooking(
-          booking.id,
-          {
-            status: 'cancelled',
-            syncStatus: this.isOnline ? 'synced' : 'pending',
-          }
-        );
+        // ✅ Use WorkerManager for proper event broadcasting
+        const updateCount = await this.workerManager.updateBooking(booking.id, {
+          status: 'cancelled',
+          syncStatus: this.isOnline ? 'synced' : 'pending',
+        });
 
-        if (updateCount > 0) {
-          alert('✅ Booking cancelled successfully');
-        } else {
-          alert('⚠️ Booking not found');
-        }
+        // ✅ Wrap UI update in NgZone
+        this.ngZone.run(() => {
+          if (updateCount > 0) {
+            alert('✅ Booking cancelled successfully');
+          } else {
+            alert('⚠️ Booking not found');
+          }
+        });
       }
     } catch (error) {
-      console.error('[MyBookings] ❌ Failed to cancel booking:', error);
-      alert('❌ Failed to cancel booking');
+      this.ngZone.run(() => {
+        console.error('[MyBookings] ❌ Failed to cancel booking:', error);
+        alert('❌ Failed to cancel booking');
+      });
     }
   }
 
@@ -233,12 +270,19 @@ export class MyBookingComponent implements OnInit, OnDestroy {
 
     try {
       if (booking.id !== undefined) {
-        await this.offlineStorage.deleteBooking(booking.id);
-        alert('🗑️ Booking deleted successfully');
+        // ✅ Use WorkerManager for proper event broadcasting
+        await this.workerManager.deleteBooking(booking.id);
+
+        // ✅ Wrap UI update in NgZone
+        this.ngZone.run(() => {
+          alert('🗑️ Booking deleted successfully');
+        });
       }
     } catch (error) {
-      console.error('[MyBookings] ❌ Failed to delete booking:', error);
-      alert('❌ Failed to delete booking');
+      this.ngZone.run(() => {
+        console.error('[MyBookings] ❌ Failed to delete booking:', error);
+        alert('❌ Failed to delete booking');
+      });
     }
   }
 
@@ -265,14 +309,18 @@ export class MyBookingComponent implements OnInit, OnDestroy {
 
       const success = await this.syncService.syncPendingBookings();
 
-      if (success) {
-        alert(`✅ All bookings synced successfully!`);
-      } else {
-        alert('⚠️ Some bookings failed to sync');
-      }
+      this.ngZone.run(() => {
+        if (success) {
+          alert('✅ All bookings synced successfully!');
+        } else {
+          alert('⚠️ Some bookings failed to sync');
+        }
+      });
     } catch (error) {
-      console.error('[MyBookings] ❌ Sync failed:', error);
-      alert('❌ Failed to sync bookings');
+      this.ngZone.run(() => {
+        console.error('[MyBookings] ❌ Sync failed:', error);
+        alert('❌ Failed to sync bookings');
+      });
     }
   }
 
