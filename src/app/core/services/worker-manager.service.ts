@@ -2,7 +2,7 @@
 // ✅ FIXED: Added NgZone integration for proper change detection
 
 import { Injectable, OnDestroy, NgZone } from '@angular/core';
-import { Observable, Subject, firstValueFrom } from 'rxjs';
+import { Observable, Subject, firstValueFrom, Subscription } from 'rxjs';
 import { filter, map, timeout } from 'rxjs/operators';
 import { Booking } from '../models/booking.model';
 import { Ticket } from '../models/ticket.model';
@@ -14,6 +14,7 @@ import {
 import { BatchUpdate } from '../models/batch-update.model';
 import { WorkerResponse } from '../models/worker-response.model';
 import { DataStoreService } from './data-store.service';
+import { NetworkService } from './network.service';
 import { WorkerEvent } from '../models/worker-event.model';
 
 interface SyncResult {
@@ -38,12 +39,64 @@ export class WorkerManagerService implements OnDestroy {
   private responseSubject = new Subject<WorkerResponse>();
   private messageCounter = 0;
   private readonly DEFAULT_TIMEOUT = 30000;
+  private networkSubscription?: Subscription;
 
   constructor(
     private dataStore: DataStoreService,
-    private ngZone: NgZone // ✅ ADDED: NgZone for change detection
+    private ngZone: NgZone, // ✅ ADDED: NgZone for change detection
+    private networkService: NetworkService
   ) {
     this.initializeWorker();
+    this.setupAutoSync();
+  }
+  private setupAutoSync(): void {
+    // ✅ Listen for network status changes
+    this.networkSubscription = this.networkService.isOnline$.subscribe(
+      async (isOnline) => {
+        if (isOnline) {
+          console.log(
+            '[WorkerManager] 🌐 Network online - checking for pending bookings'
+          );
+
+          try {
+            // ✅ Check if there are pending bookings first
+            const stats = await this.getStats();
+
+            if (stats.pendingSync > 0) {
+              console.log(
+                `[WorkerManager] 🔄 Found ${stats.pendingSync} pending bookings - starting auto-sync`
+              );
+
+              // ✅ Trigger automatic sync
+              const result = await this.syncPendingBookings();
+
+              console.log('[WorkerManager] ✅ Auto-sync completed:', result);
+
+              // ✅ Show user notification if sync was successful
+              if (result.successful > 0) {
+                this.ngZone.run(() => {
+                  // You can emit an event here or show a toast notification
+                  console.log(
+                    `[WorkerManager] 🎉 Successfully synced ${result.successful} booking(s)`
+                  );
+                });
+              }
+
+              if (result.failed > 0) {
+                console.warn(
+                  `[WorkerManager] ⚠️ Failed to sync ${result.failed} booking(s)`,
+                  result.errors
+                );
+              }
+            } else {
+              console.log('[WorkerManager] ✅ No pending bookings to sync');
+            }
+          } catch (error) {
+            console.error('[WorkerManager] ❌ Auto-sync failed:', error);
+          }
+        }
+      }
+    );
   }
 
   // ==================== INITIALIZATION ====================

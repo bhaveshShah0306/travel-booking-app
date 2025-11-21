@@ -44,6 +44,7 @@ type WorkerMessageType =
   | 'SYNC_BOOKINGS'
   | 'GET_STATS'
   | 'BATCH_UPDATE'
+  | 'NETWORK_ONLINE'
   | 'ANALYZE_DATA';
 
 type WorkerEventType =
@@ -285,6 +286,11 @@ async function syncPendingBookings(): Promise<SyncResult> {
     errors: [],
   };
 
+  if (pendingBookings.length === 0) {
+    console.log('[Worker] ✅ No pending bookings to sync');
+    return results;
+  }
+
   const batchSize = 5;
   for (let i = 0; i < pendingBookings.length; i += batchSize) {
     const batch = pendingBookings.slice(i, i + batchSize);
@@ -301,10 +307,14 @@ async function syncPendingBookings(): Promise<SyncResult> {
           await simulateApiSync(booking);
 
           if (booking.id) {
+            // ✅ CRITICAL: Update BOTH fields together
             await db.bookings.update(booking.id, {
               syncStatus: 'synced',
-              status: 'confirmed',
+              status: 'confirmed', // ✅ Change from 'pending' to 'confirmed'
             });
+            console.log(
+              `[Worker] ✅ Synced booking ${booking.id}: pending → confirmed`
+            );
           }
 
           results.successful++;
@@ -312,6 +322,7 @@ async function syncPendingBookings(): Promise<SyncResult> {
           if (booking.id) {
             await db.bookings.update(booking.id, {
               syncStatus: 'failed',
+              // ✅ Keep status as 'pending' when sync fails
             });
           }
 
@@ -328,6 +339,7 @@ async function syncPendingBookings(): Promise<SyncResult> {
     `[Worker] ✅ Sync complete: ${results.successful} successful, ${results.failed} failed`
   );
 
+  // ✅ Broadcast updated stats after sync
   const stats = await getStats();
   broadcastEvent('SYNC_COMPLETED', { results, stats });
 
@@ -416,6 +428,21 @@ async function analyzeBookingData(): Promise<BookingAnalytics> {
 
 // ==================== MESSAGE HANDLER ====================
 
+// ✅ NEW: Add automatic sync when network reconnects
+// Add this NEW function before handleMessage:
+async function handleNetworkOnline(): Promise<void> {
+  console.log(
+    '[Worker] 🌐 Network detected online - auto-syncing pending bookings'
+  );
+
+  try {
+    const result = await syncPendingBookings();
+    console.log('[Worker] 🔄 Auto-sync completed:', result);
+  } catch (error) {
+    console.error('[Worker] ❌ Auto-sync failed:', error);
+  }
+}
+
 async function handleMessage(message: WorkerMessage): Promise<void> {
   const { id, type, payload } = message;
 
@@ -442,9 +469,15 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
         const updatePayload = payload as UpdateBookingPayload;
         const updateCount = await updateBooking(
           updatePayload.bookingId,
-          updatePayload.updates
+          updatePayload.updates // ✅ FIXED: removed "syncStatus." prefix
         );
         sendResponse({ id, type, success: true, data: updateCount });
+        break;
+      }
+
+      case 'NETWORK_ONLINE': {
+        await handleNetworkOnline();
+        sendResponse({ id, type, success: true });
         break;
       }
 
