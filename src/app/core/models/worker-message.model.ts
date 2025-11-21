@@ -1,7 +1,7 @@
 import { Booking } from './booking.model';
 import { Ticket } from './ticket.model';
 import { BatchUpdate } from './batch-update.model';
-import { UpdateBookingPayload } from './booking-payload.model';
+import { UpdateBookingPayload } from './update-booking-payload.model';
 
 export type WorkerPayload =
   | Booking

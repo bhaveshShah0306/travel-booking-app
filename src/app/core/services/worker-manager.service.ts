@@ -11,8 +11,7 @@ import {
 } from '../models/worker-message.model';
 import { BatchUpdate } from '../models/batch-update.model';
 import { WorkerResponse } from '../models/worker-response.model';
-
-// ==================== TYPE DEFINITIONS ====================
+import { DataStoreService, WorkerEvent } from './data-store.service';
 
 interface SyncResult {
   successful: number;
@@ -28,8 +27,6 @@ interface BookingAnalytics {
   topRoutes: Array<{ route: string; count: number }>;
 }
 
-// ==================== SERVICE ====================
-
 @Injectable({
   providedIn: 'root',
 })
@@ -37,9 +34,9 @@ export class WorkerManagerService implements OnDestroy {
   private worker: Worker | null = null;
   private responseSubject = new Subject<WorkerResponse>();
   private messageCounter = 0;
-  private readonly DEFAULT_TIMEOUT = 30000; // 30 seconds
+  private readonly DEFAULT_TIMEOUT = 30000;
 
-  constructor() {
+  constructor(private dataStore: DataStoreService) {
     this.initializeWorker();
   }
 
@@ -54,6 +51,15 @@ export class WorkerManagerService implements OnDestroy {
         );
 
         this.worker.onmessage = ({ data }: MessageEvent<WorkerResponse>) => {
+          // ✅ Check if it's an event broadcast
+          if (data.id === 'EVENT' && data.type === ('EVENT' as any)) {
+            const event = data.data as WorkerEvent;
+            console.log('[WorkerManager] 📢 Worker event received:', event);
+            this.dataStore.handleWorkerEvent(event);
+            return;
+          }
+
+          // Regular response
           console.log('[WorkerManager] Received response:', data);
           this.responseSubject.next(data);
         };
@@ -92,15 +98,11 @@ export class WorkerManagerService implements OnDestroy {
     }
 
     const id = this.generateMessageId();
-
     const message: WorkerMessage = { id, type, payload };
 
     console.log('[WorkerManager] Sending message:', message);
-
-    // Post message to worker
     this.worker.postMessage(message);
 
-    // Wait for response with timeout
     return firstValueFrom(
       this.responseSubject.pipe(
         filter((response) => response.id === id),
@@ -160,7 +162,7 @@ export class WorkerManagerService implements OnDestroy {
   // ==================== SYNC OPERATIONS ====================
 
   async syncPendingBookings(): Promise<SyncResult> {
-    return this.sendMessage<SyncResult>('SYNC_BOOKINGS', null, 60000); // 60s timeout for sync
+    return this.sendMessage<SyncResult>('SYNC_BOOKINGS', null, 60000);
   }
 
   // ==================== ANALYTICS ====================
@@ -170,7 +172,19 @@ export class WorkerManagerService implements OnDestroy {
     tickets: number;
     pendingSync: number;
   }> {
-    return this.sendMessage('GET_STATS');
+    const stats = await this.sendMessage<{
+      bookings: number;
+      tickets: number;
+      pendingSync: number;
+    }>('GET_STATS');
+
+    // ✅ Update data store with latest stats
+    this.dataStore.updateBookingStats({
+      total: stats.bookings,
+      needsSync: stats.pendingSync,
+    });
+
+    return stats;
   }
 
   async analyzeData(): Promise<BookingAnalytics> {
@@ -193,12 +207,10 @@ export class WorkerManagerService implements OnDestroy {
 
   // ==================== OBSERVABLE STREAMS ====================
 
-  // Stream for monitoring all worker responses
   getResponseStream(): Observable<WorkerResponse> {
     return this.responseSubject.asObservable();
   }
 
-  // Stream for sync status updates
   getSyncStream(): Observable<WorkerResponse> {
     return this.responseSubject.pipe(
       filter((response) => response.type === 'SYNC_BOOKINGS')

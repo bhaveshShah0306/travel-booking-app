@@ -1,7 +1,8 @@
+// src/app/workers/data-worker.worker.ts
 /// <reference lib="webworker" />
 
 import Dexie from 'dexie';
-import { UpdateBookingPayload } from 'src/app/core/models/booking-payload.model';
+import { UpdateBookingPayload } from '../core/models/update-booking-payload.model';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -32,7 +33,6 @@ interface Ticket {
   availableSeats: number;
 }
 
-// Worker Message Types
 type WorkerMessageType =
   | 'INIT_DB'
   | 'SAVE_BOOKING'
@@ -46,25 +46,34 @@ type WorkerMessageType =
   | 'BATCH_UPDATE'
   | 'ANALYZE_DATA';
 
+// ✅ NEW: Event types for broadcasting
+type WorkerEventType =
+  | 'BOOKING_SAVED'
+  | 'BOOKING_UPDATED'
+  | 'BOOKING_DELETED'
+  | 'STATS_CHANGED'
+  | 'SYNC_PROGRESS'
+  | 'SYNC_COMPLETED';
+
 interface WorkerMessage {
   id: string;
   type: WorkerMessageType;
-  payload?: WorkerPayload;
+  payload?: any;
 }
 
-type WorkerPayload =
-  | Booking
-  | Partial<Booking>
-  | BatchUpdate[]
-  | { from: string; to: string; date?: Date }
-  | Ticket[]
-  | undefined;
 interface WorkerResponse<T = unknown> {
   id: string;
   type: WorkerMessageType;
   success: boolean;
   data?: T;
   error?: string;
+}
+
+// ✅ NEW: Worker Event for broadcasting changes
+interface WorkerEvent {
+  type: WorkerEventType;
+  data: any;
+  timestamp: number;
 }
 
 // ==================== DATABASE SETUP ====================
@@ -84,6 +93,26 @@ class OfflineDatabase extends Dexie {
 
 let db: OfflineDatabase;
 
+// ==================== EVENT BROADCASTING ====================
+
+function broadcastEvent(type: WorkerEventType, data: any): void {
+  const event: WorkerEvent = {
+    type,
+    data,
+    timestamp: Date.now(),
+  };
+
+  // Send as a special "EVENT" message
+  postMessage({
+    id: 'EVENT',
+    type: 'EVENT' as any,
+    success: true,
+    data: event,
+  });
+
+  console.log('[Worker] 📢 Broadcast event:', type, data);
+}
+
 // ==================== UTILITY FUNCTIONS ====================
 
 function sendResponse(response: WorkerResponse): void {
@@ -99,8 +128,6 @@ function sendError(id: string, type: WorkerMessageType, error: unknown): void {
   });
 }
 
-// Simulate API call for sync
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function simulateApiSync(booking: Booking): Promise<void> {
   return new Promise((resolve, reject) => {
     setTimeout(() => {
@@ -127,7 +154,13 @@ async function saveBooking(booking: Booking): Promise<number> {
   booking.createdAt = new Date();
   booking.syncStatus = 'pending';
   const id = await db.bookings.add(booking);
+
   console.log('[Worker] Booking saved:', id);
+
+  // ✅ Broadcast event
+  const stats = await getStats();
+  broadcastEvent('BOOKING_SAVED', { bookingId: id, stats });
+
   return id;
 }
 
@@ -139,11 +172,23 @@ async function updateBooking(
   id: number,
   updates: Partial<Booking>
 ): Promise<number> {
-  return await db.bookings.update(id, updates);
+  const result = await db.bookings.update(id, updates);
+
+  // ✅ Broadcast event
+  if (result > 0) {
+    const stats = await getStats();
+    broadcastEvent('BOOKING_UPDATED', { bookingId: id, updates, stats });
+  }
+
+  return result;
 }
 
 async function deleteBooking(id: number): Promise<void> {
   await db.bookings.delete(id);
+
+  // ✅ Broadcast event
+  const stats = await getStats();
+  broadcastEvent('BOOKING_DELETED', { bookingId: id, stats });
 }
 
 async function searchTickets(
@@ -211,17 +256,22 @@ async function syncPendingBookings(): Promise<SyncResult> {
     errors: [],
   };
 
-  // Process bookings in parallel (max 5 concurrent)
   const batchSize = 5;
   for (let i = 0; i < pendingBookings.length; i += batchSize) {
     const batch = pendingBookings.slice(i, i + batchSize);
 
-    const _batchResults = await Promise.allSettled(
+    // ✅ Broadcast progress
+    broadcastEvent('SYNC_PROGRESS', {
+      current: i,
+      total: pendingBookings.length,
+      percentage: Math.round((i / pendingBookings.length) * 100),
+    });
+
+    await Promise.allSettled(
       batch.map(async (booking) => {
         try {
           await simulateApiSync(booking);
 
-          // Update booking status
           if (booking.id) {
             await db.bookings.update(booking.id, {
               syncStatus: 'synced',
@@ -241,19 +291,18 @@ async function syncPendingBookings(): Promise<SyncResult> {
           results.errors.push(
             `Booking ${booking.id}: ${(error as Error).message}`
           );
-          throw error;
         }
       })
     );
-    console.log(`[Worker] Batch ${i / batchSize + 1} completed:`, {
-      fulfilled: _batchResults.filter((r) => r.status === 'fulfilled').length,
-      rejected: _batchResults.filter((r) => r.status === 'rejected').length,
-    });
   }
 
   console.log(
     `[Worker] Sync complete: ${results.successful} successful, ${results.failed} failed`
   );
+
+  // ✅ Broadcast completion
+  const stats = await getStats();
+  broadcastEvent('SYNC_COMPLETED', { results, stats });
 
   return results;
 }
@@ -268,7 +317,6 @@ interface BatchUpdate {
 async function batchUpdateBookings(updates: BatchUpdate[]): Promise<number> {
   let updateCount = 0;
 
-  // Use transaction for atomicity
   await db.transaction('rw', db.bookings, async () => {
     for (const { id, updates: data } of updates) {
       const result = await db.bookings.update(id, data);
@@ -277,6 +325,11 @@ async function batchUpdateBookings(updates: BatchUpdate[]): Promise<number> {
   });
 
   console.log(`[Worker] Batch updated ${updateCount} bookings`);
+
+  // ✅ Broadcast stats change
+  const stats = await getStats();
+  broadcastEvent('STATS_CHANGED', stats);
+
   return updateCount;
 }
 
@@ -294,7 +347,6 @@ async function analyzeBookingData(): Promise<BookingAnalytics> {
   const bookings = await db.bookings.toArray();
   const tickets = await db.tickets.toArray();
 
-  // Create ticket lookup map
   const ticketMap = new Map(tickets.map((t) => [t.id, t]));
 
   const analytics: BookingAnalytics = {
@@ -305,41 +357,34 @@ async function analyzeBookingData(): Promise<BookingAnalytics> {
     topRoutes: [],
   };
 
-  // Calculate revenue
   analytics.totalRevenue = bookings.reduce((sum, b) => sum + b.totalAmount, 0);
   analytics.averageBookingValue = bookings.length
     ? analytics.totalRevenue / bookings.length
     : 0;
 
-  // Group by status
   for (const booking of bookings) {
     analytics.bookingsByStatus[booking.status] =
       (analytics.bookingsByStatus[booking.status] || 0) + 1;
   }
 
-  // Group by type and route
   const routeCounts: Record<string, number> = {};
 
   for (const booking of bookings) {
     const ticket = ticketMap.get(booking.ticketId);
     if (ticket) {
-      // By type
       analytics.bookingsByType[ticket.type] =
         (analytics.bookingsByType[ticket.type] || 0) + 1;
 
-      // By route
       const route = `${ticket.from} → ${ticket.to}`;
       routeCounts[route] = (routeCounts[route] || 0) + 1;
     }
   }
 
-  // Get top 5 routes
   analytics.topRoutes = Object.entries(routeCounts)
     .map(([route, count]) => ({ route, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 
-  console.log('[Worker] Analytics generated:', analytics);
   return analytics;
 }
 

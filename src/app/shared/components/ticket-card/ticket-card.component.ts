@@ -7,6 +7,7 @@ import { Ticket } from '../../../core/models/ticket.model';
   templateUrl: './ticket-card.component.html',
   styleUrls: ['./ticket-card.component.scss'],
   // Shadow DOM creates a boundary - styles from outside can't get in
+  standalone: true,
   encapsulation: ViewEncapsulation.ShadowDom,
 })
 export class TicketCardComponent {

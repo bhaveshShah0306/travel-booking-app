@@ -1,64 +1,46 @@
 // src/app/core/services/sync.service.ts
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, interval, Subscription } from 'rxjs';
+import { interval, Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { NetworkService } from './network.service';
 import { WorkerManagerService } from './worker-manager.service';
-import { SyncStatus } from '../models/syncstatus.model';
-import { SyncResponseData } from '../models/sync-reponse-data.model';
+import { DataStoreService } from './data-store.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class SyncService {
-  private syncStatus$ = new BehaviorSubject<SyncStatus>({
-    isSyncing: false,
-    lastSyncTime: null,
-    pendingCount: 0,
-    failedCount: 0,
-    syncErrors: [],
-  });
-
   private autoSyncSubscription?: Subscription;
-  private workerSyncSubscription?: Subscription;
 
   constructor(
     private workerManager: WorkerManagerService,
-    private networkService: NetworkService
+    private networkService: NetworkService,
+    private dataStore: DataStoreService
   ) {
     this.initAutoSync();
-    this.monitorWorkerSync();
+    this.monitorNetworkChanges();
   }
 
-  // ==================== OBSERVABLE ====================
+  // ==================== OBSERVABLES ====================
 
+  /**
+   * Get sync status from data store
+   * Components should subscribe to this
+   */
   getSyncStatus() {
-    return this.syncStatus$.asObservable();
+    return this.dataStore.getSyncStatus$();
+  }
+
+  /**
+   * Get pending sync count
+   */
+  getPendingSyncCount() {
+    return this.dataStore.getPendingSyncCount$();
   }
 
   // ==================== AUTO-SYNC INITIALIZATION ====================
 
   private initAutoSync(): void {
-    // Sync when network status changes to online
-    this.networkService.isOnline$
-      .pipe(filter((isOnline) => isOnline))
-      .subscribe(async () => {
-        console.log(
-          '[SyncService] 📡 Network online - checking for pending bookings'
-        );
-        await this.updatePendingCount();
-
-        const currentStatus = this.syncStatus$.value;
-        if (currentStatus.pendingCount > 0) {
-          console.log(
-            '[SyncService] 🔄 Auto-syncing',
-            currentStatus.pendingCount,
-            'pending bookings'
-          );
-          this.syncPendingBookings();
-        }
-      });
-
     // Periodic sync every 5 minutes when online
     this.autoSyncSubscription = interval(300000) // 5 minutes
       .pipe(filter(() => this.networkService.isOnline$.value))
@@ -66,51 +48,54 @@ export class SyncService {
         console.log('[SyncService] 🔄 Periodic sync triggered');
         await this.updatePendingCount();
 
-        const currentStatus = this.syncStatus$.value;
-        if (currentStatus.pendingCount > 0) {
+        const pendingCount =
+          this.dataStore.getCurrentState().bookings.needsSync;
+        if (pendingCount > 0) {
           this.syncPendingBookings();
         }
       });
   }
 
-  // Monitor worker sync responses
-  private monitorWorkerSync(): void {
-    this.workerSyncSubscription = this.workerManager
-      .getSyncStream()
-      .subscribe((response) => {
-        console.log('[SyncService] Worker sync response:', response);
+  private monitorNetworkChanges(): void {
+    // Sync when network comes back online
+    this.networkService.isOnline$
+      .pipe(filter((isOnline) => isOnline))
+      .subscribe(async () => {
+        console.log(
+          '[SyncService] 📡 Network online - checking pending bookings'
+        );
 
-        if (response.success && response.data) {
-          const data = response.data as SyncResponseData;
-          const { successful, failed, errors } = data;
+        // Update data store with network status
+        this.dataStore.updateNetworkStatus(true);
+
+        // Check for pending bookings
+        await this.updatePendingCount();
+
+        const pendingCount =
+          this.dataStore.getCurrentState().bookings.needsSync;
+        if (pendingCount > 0) {
           console.log(
-            `[SyncService] ✅ Worker sync completed: ${successful} successful, ${failed} failed`
+            `[SyncService] 🔄 Auto-syncing ${pendingCount} pending bookings`
           );
-
-          this.updateSyncStatus({
-            isSyncing: false,
-            lastSyncTime: new Date(),
-            pendingCount: failed,
-            failedCount: failed,
-            syncErrors: errors,
-          });
-        } else {
-          console.error('[SyncService] ❌ Worker sync failed:', response.error);
-          this.updateSyncStatus({
-            isSyncing: false,
-            syncErrors: [response.error || 'Unknown error'],
-          });
+          this.syncPendingBookings();
         }
+      });
+
+    // Update data store when offline
+    this.networkService.isOnline$
+      .pipe(filter((isOnline) => !isOnline))
+      .subscribe(() => {
+        this.dataStore.updateNetworkStatus(false);
       });
   }
 
-  // ==================== MAIN SYNC FUNCTION (USING WORKER) ====================
+  // ==================== MAIN SYNC FUNCTION ====================
 
   async syncPendingBookings(): Promise<boolean> {
-    const currentStatus = this.syncStatus$.value;
+    const currentState = this.dataStore.getCurrentState();
 
     // Prevent concurrent syncs
-    if (currentStatus.isSyncing) {
+    if (currentState.sync.isSyncing) {
       console.log('[SyncService] ⏳ Sync already in progress');
       return false;
     }
@@ -124,50 +109,74 @@ export class SyncService {
     try {
       // Update pending count first
       await this.updatePendingCount();
-      const updatedStatus = this.syncStatus$.value;
+      const updatedState = this.dataStore.getCurrentState();
 
-      if (updatedStatus.pendingCount === 0) {
+      if (updatedState.bookings.needsSync === 0) {
         console.log('[SyncService] ✅ No pending bookings to sync');
         return true;
       }
 
       console.log(
         '[SyncService] 🔄 Starting sync for',
-        updatedStatus.pendingCount,
+        updatedState.bookings.needsSync,
         'bookings'
       );
 
-      // Update status: syncing started
-      this.updateSyncStatus({
+      // Update sync status
+      this.dataStore.updateSyncStatus({
         isSyncing: true,
-        syncErrors: [],
-        pendingCount: updatedStatus.pendingCount,
+        progress: 0,
       });
 
-      // DELEGATE TO WORKER - This runs on a separate thread!
+      // DELEGATE TO WORKER - Worker will broadcast events during sync
       const result = await this.workerManager.syncPendingBookings();
 
       console.log(
         `[SyncService] ✅ Sync completed: ${result.successful} successful, ${result.failed} failed`
       );
 
-      // Update final status
-      this.updateSyncStatus({
+      // Final update (Worker already broadcast SYNC_COMPLETED event)
+      this.dataStore.updateSyncStatus({
         isSyncing: false,
+        progress: 100,
         lastSyncTime: new Date(),
-        pendingCount: result.failed,
-        failedCount: result.failed,
-        syncErrors: result.errors,
       });
 
       return result.failed === 0;
     } catch (error) {
       console.error('[SyncService] ❌ Sync error:', error);
-      this.updateSyncStatus({
+      this.dataStore.updateSyncStatus({
         isSyncing: false,
-        syncErrors: [(error as Error).message],
+        progress: 0,
       });
       return false;
+    }
+  }
+
+  // ==================== UPDATE PENDING COUNT ====================
+
+  /**
+   * ✅ FIXED: Now delegates to worker and updates data store
+   * This is the function you mentioned in your question
+   */
+  async updatePendingCount(): Promise<void> {
+    try {
+      console.log('[SyncService] 🔄 Updating pending count from worker...');
+
+      // ✅ Get stats from worker - this will also trigger worker to broadcast event
+      const stats = await this.workerManager.getStats();
+
+      console.log('[SyncService] 📊 Stats received from worker:', stats);
+
+      // ✅ Update data store (worker already did this, but we ensure consistency)
+      this.dataStore.updateBookingStats({
+        total: stats.bookings,
+        needsSync: stats.pendingSync,
+      });
+
+      console.log('[SyncService] ✅ Pending count updated:', stats.pendingSync);
+    } catch (error) {
+      console.error('[SyncService] ❌ Failed to update pending count:', error);
     }
   }
 
@@ -202,14 +211,14 @@ export class SyncService {
 
     try {
       console.log('[SyncService] 🔄 Retrying failed syncs');
-      const stats = await this.workerManager.getStats();
+      await this.updatePendingCount();
 
-      if (stats.pendingSync === 0) {
+      const state = this.dataStore.getCurrentState();
+      if (state.bookings.needsSync === 0) {
         console.log('[SyncService] ✅ No pending syncs to retry');
         return true;
       }
 
-      // Sync all pending bookings (including previously failed ones)
       return this.syncPendingBookings();
     } catch (error) {
       console.error('[SyncService] ❌ Failed to retry syncs:', error);
@@ -217,26 +226,7 @@ export class SyncService {
     }
   }
 
-  // ==================== UTILITY METHODS ====================
-
-  private updateSyncStatus(partial: Partial<SyncStatus>): void {
-    const current = this.syncStatus$.value;
-    const updated = { ...current, ...partial };
-    console.log('[SyncService] Updating sync status:', updated);
-    this.syncStatus$.next(updated);
-  }
-
-  async updatePendingCount(): Promise<void> {
-    try {
-      const stats = await this.workerManager.getStats();
-      console.log('[SyncService] Updated pending count:', stats.pendingSync);
-      this.updateSyncStatus({ pendingCount: stats.pendingSync });
-    } catch (error) {
-      console.error('[SyncService] ❌ Failed to update pending count:', error);
-    }
-  }
-
-  // ==================== BACKGROUND SYNC (PERIODIC) ====================
+  // ==================== BACKGROUND SYNC ====================
 
   startBackgroundSync(intervalMinutes = 5): void {
     if (this.autoSyncSubscription) {
@@ -249,8 +239,8 @@ export class SyncService {
         console.log('[SyncService] 🔄 Background sync triggered');
         await this.updatePendingCount();
 
-        const currentStatus = this.syncStatus$.value;
-        if (currentStatus.pendingCount > 0) {
+        const state = this.dataStore.getCurrentState();
+        if (state.bookings.needsSync > 0) {
           this.syncPendingBookings();
         }
       });
@@ -272,9 +262,6 @@ export class SyncService {
   destroy(): void {
     if (this.autoSyncSubscription) {
       this.autoSyncSubscription.unsubscribe();
-    }
-    if (this.workerSyncSubscription) {
-      this.workerSyncSubscription.unsubscribe();
     }
   }
 }

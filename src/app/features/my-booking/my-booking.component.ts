@@ -2,10 +2,11 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { Subscription, combineLatest } from 'rxjs';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import { NetworkService } from '../../core/services/network.service';
 import { SyncService } from '../../core/services/sync.service';
+import { DataStoreService } from '../../core/services/data-store.service';
 import { Booking } from '../../core/models/booking.model';
 import { Ticket } from '../../core/models/ticket.model';
 
@@ -26,9 +27,9 @@ export class MyBookingComponent implements OnInit, OnDestroy {
   isOnline = true;
   isLoading = false;
   isSyncing = false;
+  syncProgress = 0;
 
   selectedStatus: 'all' | 'pending' | 'confirmed' | 'cancelled' = 'all';
-  selectedSyncStatus: 'all' | 'synced' | 'pending' | 'failed' = 'all';
 
   stats = {
     total: 0,
@@ -44,37 +45,98 @@ export class MyBookingComponent implements OnInit, OnDestroy {
     private router: Router,
     private offlineStorage: OfflineStorageService,
     private networkService: NetworkService,
-    private syncService: SyncService
+    private syncService: SyncService,
+    private dataStore: DataStoreService
   ) {}
 
   async ngOnInit(): Promise<void> {
-    this.monitorNetwork();
-    this.monitorSync();
+    console.log('[MyBookings] 🚀 Component initialized');
+
+    // ✅ Subscribe to reactive state changes
+    this.subscribeToState();
+
+    // Load initial data
     await this.loadBookings();
+
+    // Update stats from worker
+    await this.syncService.updatePendingCount();
   }
 
   ngOnDestroy(): void {
     this.subscriptions.forEach((sub) => sub.unsubscribe());
-  }
-
-  private monitorNetwork(): void {
-    const networkSub = this.networkService.isOnline$.subscribe(
-      async (status) => {
-        this.isOnline = status;
-        if (status && this.stats.needsSync > 0) {
-          await this.syncPendingBookings();
-        }
-      }
+    console.log(
+      '[MyBookings] 🧹 Component destroyed, subscriptions cleaned up'
     );
-    this.subscriptions.push(networkSub);
   }
 
-  private monitorSync(): void {
-    const syncSub = this.syncService.getSyncStatus().subscribe((status) => {
-      this.isSyncing = status.isSyncing;
+  // ==================== REACTIVE STATE SUBSCRIPTIONS ====================
+
+  private subscribeToState(): void {
+    // ✅ Subscribe to booking stats
+    const statsSub = this.dataStore.getBookingStats$().subscribe((stats) => {
+      console.log('[MyBookings] 📊 Booking stats updated:', stats);
+      this.stats = {
+        ...this.stats,
+        total: stats.total,
+        needsSync: stats.needsSync,
+      };
+    });
+    this.subscriptions.push(statsSub);
+
+    // ✅ Subscribe to sync status
+    const syncSub = this.dataStore.getSyncStatus$().subscribe((syncStatus) => {
+      console.log('[MyBookings] 🔄 Sync status updated:', syncStatus);
+      this.isSyncing = syncStatus.isSyncing;
+      this.syncProgress = syncStatus.progress;
     });
     this.subscriptions.push(syncSub);
+
+    // ✅ Subscribe to network status
+    const networkSub = this.networkService.isOnline$.subscribe((status) => {
+      console.log('[MyBookings] 📡 Network status:', status);
+      this.isOnline = status;
+    });
+    this.subscriptions.push(networkSub);
+
+    // ✅ Subscribe to worker events for real-time updates
+    const eventsSub = this.dataStore.getEvents$().subscribe(async (event) => {
+      console.log('[MyBookings] 📢 Worker event received:', event);
+
+      // Reload bookings when data changes
+      if (
+        [
+          'BOOKING_SAVED',
+          'BOOKING_UPDATED',
+          'BOOKING_DELETED',
+          'SYNC_COMPLETED',
+        ].includes(event.type)
+      ) {
+        console.log('[MyBookings] 🔄 Reloading bookings due to:', event.type);
+        await this.loadBookings();
+      }
+    });
+    this.subscriptions.push(eventsSub);
+
+    // ✅ Combined subscription for complex logic
+    const combinedSub = combineLatest([
+      this.networkService.isOnline$,
+      this.dataStore.getPendingSyncCount$(),
+    ]).subscribe(async ([isOnline, pendingCount]) => {
+      console.log('[MyBookings] 🔗 Combined state:', {
+        isOnline,
+        pendingCount,
+      });
+
+      // Auto-sync when coming online with pending bookings
+      if (isOnline && pendingCount > 0 && !this.isSyncing) {
+        console.log('[MyBookings] 🔄 Auto-triggering sync');
+        setTimeout(() => this.syncPendingBookings(), 1000);
+      }
+    });
+    this.subscriptions.push(combinedSub);
   }
+
+  // ==================== DATA LOADING ====================
 
   private async loadBookings(): Promise<void> {
     this.isLoading = true;
@@ -93,8 +155,10 @@ export class MyBookingComponent implements OnInit, OnDestroy {
       this.filteredBookings = [...this.bookings];
       this.calculateStats();
       this.applyFilters();
+
+      console.log('[MyBookings] ✅ Loaded', this.bookings.length, 'bookings');
     } catch (error) {
-      console.error('Failed to load bookings:', error);
+      console.error('[MyBookings] ❌ Failed to load bookings:', error);
       alert('❌ Failed to load bookings');
     } finally {
       this.isLoading = false;
@@ -115,17 +179,14 @@ export class MyBookingComponent implements OnInit, OnDestroy {
     this.stats.needsSync = this.bookings.filter(
       (b) => b.syncStatus === 'pending'
     ).length;
+
+    console.log('[MyBookings] 📊 Calculated stats:', this.stats);
   }
+
+  // ==================== FILTERS ====================
 
   filterByStatus(status: 'all' | 'pending' | 'confirmed' | 'cancelled'): void {
     this.selectedStatus = status;
-    this.applyFilters();
-  }
-
-  filterBySyncStatus(
-    syncStatus: 'all' | 'synced' | 'pending' | 'failed'
-  ): void {
-    this.selectedSyncStatus = syncStatus;
     this.applyFilters();
   }
 
@@ -136,10 +197,6 @@ export class MyBookingComponent implements OnInit, OnDestroy {
       result = result.filter((b) => b.status === this.selectedStatus);
     }
 
-    if (this.selectedSyncStatus !== 'all') {
-      result = result.filter((b) => b.syncStatus === this.selectedSyncStatus);
-    }
-
     result.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -147,6 +204,8 @@ export class MyBookingComponent implements OnInit, OnDestroy {
 
     this.filteredBookings = result;
   }
+
+  // ==================== BOOKING ACTIONS ====================
 
   async cancelBooking(booking: Booking): Promise<void> {
     if (!confirm('Are you sure you want to cancel this booking?')) {
@@ -165,13 +224,13 @@ export class MyBookingComponent implements OnInit, OnDestroy {
 
         if (updateCount > 0) {
           alert('✅ Booking cancelled successfully');
-          await this.loadBookings();
+          // Worker will broadcast event and trigger reload
         } else {
           alert('⚠️ Booking not found');
         }
       }
     } catch (error) {
-      console.error('Failed to cancel booking:', error);
+      console.error('[MyBookings] ❌ Failed to cancel booking:', error);
       alert('❌ Failed to cancel booking');
     }
   }
@@ -185,13 +244,15 @@ export class MyBookingComponent implements OnInit, OnDestroy {
       if (booking.id !== undefined) {
         await this.offlineStorage.deleteBooking(booking.id);
         alert('🗑️ Booking deleted successfully');
-        await this.loadBookings();
+        // Worker will broadcast event and trigger reload
       }
     } catch (error) {
-      console.error('Failed to delete booking:', error);
+      console.error('[MyBookings] ❌ Failed to delete booking:', error);
       alert('❌ Failed to delete booking');
     }
   }
+
+  // ==================== SYNC OPERATIONS ====================
 
   async syncPendingBookings(): Promise<void> {
     if (this.stats.needsSync === 0) {
@@ -204,24 +265,28 @@ export class MyBookingComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.isSyncing) {
+      alert('⏳ Sync already in progress');
+      return;
+    }
+
     try {
-      this.isSyncing = true;
+      console.log('[MyBookings] 🔄 Starting sync...');
+
       const success = await this.syncService.syncPendingBookings();
 
       if (success) {
-        alert(`✅ ${this.stats.needsSync} booking(s) synced successfully`);
-        await this.loadBookings();
+        alert(`✅ All bookings synced successfully!`);
       } else {
         alert('⚠️ Some bookings failed to sync');
-        await this.loadBookings();
       }
     } catch (error) {
-      console.error('Sync failed:', error);
+      console.error('[MyBookings] ❌ Sync failed:', error);
       alert('❌ Failed to sync bookings');
-    } finally {
-      this.isSyncing = false;
     }
   }
+
+  // ==================== VIEW ACTIONS ====================
 
   viewBookingDetails(booking: BookingWithTicket): void {
     const details = `
@@ -248,6 +313,8 @@ ${booking.passengers
     alert(details);
   }
 
+  // ==================== NAVIGATION ====================
+
   searchTickets(): void {
     this.router.navigate(['/search']);
   }
@@ -256,30 +323,14 @@ ${booking.passengers
     this.router.navigate(['/']);
   }
 
+  // ==================== HELPERS ====================
+
   getStatusClass(status: string): string {
-    switch (status) {
-      case 'pending':
-        return 'status-pending';
-      case 'confirmed':
-        return 'status-confirmed';
-      case 'cancelled':
-        return 'status-cancelled';
-      default:
-        return '';
-    }
+    return `status-${status}`;
   }
 
   getSyncStatusClass(syncStatus: string): string {
-    switch (syncStatus) {
-      case 'synced':
-        return 'sync-synced';
-      case 'pending':
-        return 'sync-pending';
-      case 'failed':
-        return 'sync-failed';
-      default:
-        return '';
-    }
+    return `sync-${syncStatus}`;
   }
 
   getTicketIcon(type?: string): string {

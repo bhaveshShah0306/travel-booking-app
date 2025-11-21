@@ -1,7 +1,7 @@
 // src/app/features/search/search.component.ts
 import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { CommonModule } from '@angular/common';
 import {
   FormBuilder,
   FormGroup,
@@ -11,11 +11,12 @@ import {
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import { NetworkService } from '../../core/services/network.service';
 import { Ticket } from '../../core/models/ticket.model';
+import { TicketCardComponent } from '../../shared/components/ticket-card/ticket-card.component';
 
 @Component({
   selector: 'app-search',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, TicketCardComponent],
   templateUrl: './search.component.html',
   styleUrls: ['./search.component.scss'],
 })
